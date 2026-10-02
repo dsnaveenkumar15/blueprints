@@ -7,7 +7,7 @@
 <p>
   <span class="badge">{{ e.topology }}</span> <span class="badge">risk {{ e.risk }}</span>
   <span class="badge">v{{ e.version }}</span> <span class="badge">{{ e.use_case }}</span>
-  <span class="badge mono">{{ e.source }}{% if e.provenance.model %} · {{ e.provenance.model }}{% endif %}{% if e.provenance.approval_id %} · approval #{{ e.provenance.approval_id }}{% endif %}{% if e.provenance.prompts %} · {{ e.provenance.prompts|join(" ") }}{% endif %}</span>
+  <span class="badge mono">{{ e.source }}{% if e.provenance.model %} · {{ e.provenance.model | model_label }}{% endif %}{% if e.provenance.approval_id %} · approval #{{ e.provenance.approval_id }}{% endif %}{% if e.provenance.prompts %} · {{ e.provenance.prompts|join(" ") }}{% endif %}</span>
 </p>
 {% if e.refresh_pending %}<div class="notice">A refresh is queued: {{ e.refresh_pending.reason }}. This version stays available until the new one is approved.</div>{% endif %}
 {% if not e.lint_now.ok %}<div class="notice">This blueprint fails today's linter ({{ e.lint_now.errors }} error{{ "s" if e.lint_now.errors != 1 }}) against current Trust and Radar data. A refresh will follow.
@@ -28,7 +28,7 @@
   <tr>
     <td class="mono">{{ comp.id }}</td><td>{{ comp.name }}</td><td class="mono">{{ comp.kind }}</td><td>{{ comp.role }}</td>
     <td class="mono">
-      {% if comp.model %}{{ comp.model }}{% endif %}
+      {% if comp.model %}{{ comp.model | model_label }}{% endif %}
       {% if comp.tool_ref %}{% set t = tools.get(comp.id) %}{% set g = t.grade if t and t.grade else none %}
         {{ comp.tool_ref }} <span class="grade grade-{{ g or 'none' }}">{{ g or "?" }}</span> {{ "recommended" if t and t.recommended else "not recommended" }}{% endif %}
       {% if comp.framework_ref %}{% set f = frameworks.get(comp.id) %}

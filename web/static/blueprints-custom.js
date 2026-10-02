@@ -86,12 +86,12 @@
       body: JSON.stringify({model: model, max_tokens: 16000, system: prompt.system, messages: [{role: "user", content: prompt.user}]}),
     });
     const message = await response.json().catch(function () { return {}; });
-    if (!response.ok) throw new Error(message.error && message.error.message ? message.error.message : "Claude API error (" + response.status + ")");
-    if (message.stop_reason === "refusal") throw new Error("Claude declined this request.");
-    if (message.stop_reason === "max_tokens") throw new Error("Claude's reply was cut off before the blueprint was complete. Try again or choose a model with more room.");
+    if (!response.ok) throw new Error(message.error && message.error.message ? message.error.message : "Model API error (" + response.status + ")");
+    if (message.stop_reason === "refusal") throw new Error("The model declined this request.");
+    if (message.stop_reason === "max_tokens") throw new Error("The model's reply was cut off before the blueprint was complete. Try again or choose a model with more room.");
     const block = (message.content || []).find(function (b) { return b.type === "text"; });
     const blueprint = block ? extractBlueprint(block.text) : null;
-    if (!blueprint) throw new Error("Claude did not return a blueprint as JSON.");
+    if (!blueprint) throw new Error("The model did not return a blueprint as JSON.");
     return blueprint;
   }
 
@@ -134,7 +134,7 @@
       let result = null;
       let rounds = 0;
       for (let round = 0; round <= MAX_ROUNDS; round++) {
-        out.replaceChildren(el("p", round === 0 ? "Asking Claude…" : "Asking Claude to fix " + result.lint.errors + " problem(s)…", "muted"));
+        out.replaceChildren(el("p", round === 0 ? "Asking the model…" : "Asking the model to fix " + result.lint.errors + " problem(s)…", "muted"));
         const prompt = await post("/api/custom/prompt", blueprint ? Object.assign({}, base, {blueprint: blueprint}) : base);
         if (round > 0 && prompt.round === 0) break;
         blueprint = await askClaude(key, model, prompt);

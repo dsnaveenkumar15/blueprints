@@ -2,7 +2,7 @@
 {% block title %}Custom blueprint · {{ meta.name }}{% endblock %}
 {% block content %}
 <h1>Custom blueprint</h1>
-<p>Describe your requirements and Claude drafts a blueprint for them, from your browser with your own Anthropic API key. The key goes only to api.anthropic.com; it is never sent to this site and never stored. This site checks the draft with the same linter, decision rules and cost model as the library and shows the verdict. Nothing you make here is saved or published.</p>
+<p>Describe your requirements and an AI model drafts a blueprint for them, from your browser with your own API key. The key goes only to the model provider's API; it is never sent to this site and never stored. This site checks the draft with the same linter, decision rules and cost model as the library and shows the verdict. Nothing you make here is saved or published.</p>
 <form id="custom-form">
   <label>Title <input type="text" name="title" maxlength="120" value="My system" required></label>
   <label>Notes for the designer (optional, max 2000 characters)<textarea name="notes" maxlength="2000"></textarea></label>
@@ -25,8 +25,8 @@
     <label><input type="checkbox" name="quality_critical"> quality-critical</label>
   </fieldset>
   <p>
-    <select name="model" aria-label="Claude model">{% for m in byok_models %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select>
-    <input type="password" id="byok-key" autocomplete="new-password" aria-label="Anthropic API key" placeholder="sk-ant-..." required>
+    <select name="model" aria-label="Model size">{% for m in byok_models %}<option value="{{ m }}">{{ m | model_label }}</option>{% endfor %}</select>
+    <input type="password" id="byok-key" autocomplete="new-password" aria-label="API key" placeholder="your API key" required>
     <button type="submit">draft my blueprint</button>
   </p>
 </form>
