@@ -1,0 +1,26 @@
+# Optional: mount the Trust and Radar apps' published data (read-only) so Blueprints can show tool grades and framework facts.
+#   docker compose -f docker-compose.yml -f docker-compose.siblings.yml up -d
+# The volumes are those of the Trust and Radar stacks (compose project names `trust` and `radar`, volume `data`).
+services:
+  web:
+    environment:
+      - TRUST_DATA_ROOT=/trust-data/published
+      - RADAR_DATA_ROOT=/radar-data/published
+    volumes:
+      - trust_data:/trust-data:ro
+      - radar_data:/radar-data:ro
+  batch:
+    environment:
+      - TRUST_DATA_ROOT=/trust-data/published
+      - RADAR_DATA_ROOT=/radar-data/published
+    volumes:
+      - trust_data:/trust-data:ro
+      - radar_data:/radar-data:ro
+
+volumes:
+  trust_data:
+    external: true
+    name: trust_data
+  radar_data:
+    external: true
+    name: radar_data

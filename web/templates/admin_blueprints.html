@@ -1,0 +1,8 @@
+{% if held %}
+<h2>Held by the linter</h2>
+<p class="muted">You approved these, but today's Trust and Radar data makes the linter fail them. They publish by themselves once the data allows it.</p>
+<table>
+  {% for h in held %}<tr class="mono"><td><a href="/admin/blueprints/{{ h.id }}/{{ h.version }}">{{ h.id }} v{{ h.version }}</a></td><td>{{ h.reason }}</td></tr>{% endfor %}
+</table>
+{% endif %}
+

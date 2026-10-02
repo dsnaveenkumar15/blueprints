@@ -1,0 +1,42 @@
+{
+  "id": "support-agent",
+  "title": "Customer support agent with approved refunds",
+  "summary": "Routes support requests, answers from a policy knowledge base, and issues refunds only after a person approves.",
+  "use_case": "customer support",
+  "version": 1,
+  "changelog": ["v1: seed"],
+  "profile": {"latency": "interactive", "volume_per_day": 5000, "risk": "high", "data_sensitivity": "pii", "autonomy": "act_with_approval", "budget_usd_month": 2000, "capabilities": ["read", "write"], "open_ended": false, "task_kinds": 3, "parallelizable": false, "knowledge": true, "quality_critical": false},
+  "topology": "router",
+  "patterns": ["routing", "rag", "hitl-approval"],
+  "components": [
+    {"id": "router-model", "role": "classify the request as order help, policy question or refund", "kind": "model", "name": "Request router", "model": "claude-haiku-4-5", "capabilities": [], "mitigations": []},
+    {"id": "answer-model", "role": "write the customer answer from retrieved policy text", "kind": "model", "name": "Answer writer", "model": "claude-sonnet-5-5", "capabilities": [], "mitigations": []},
+    {"id": "policy-kb", "role": "policy and order-help articles", "kind": "retrieval", "name": "Policy knowledge base", "capabilities": ["read"], "mitigations": []},
+    {"id": "orders-tool", "role": "look up orders and issue refunds", "kind": "tool", "name": "Orders API", "capabilities": ["read", "write"], "mitigations": [{"capability": "write", "by": "refund-gate"}]},
+    {"id": "refund-gate", "role": "a support lead approves every refund", "kind": "human_gate", "name": "Refund approval", "capabilities": [], "mitigations": []}
+  ],
+  "guardrails": [
+    {"id": "pii-filter", "kind": "input_filter", "protects": ["router-model", "answer-model"], "description": "Redacts card numbers and national ids before any model sees the text."},
+    {"id": "audit", "kind": "audit_log", "protects": ["orders-tool"], "description": "Every order lookup and refund is logged with the request id and the approver."}
+  ],
+  "flow": [
+    {"id": "classify", "component": "router-model", "input_tokens": 600, "output_tokens": 50, "calls": 1},
+    {"id": "answer", "component": "answer-model", "input_tokens": 2500, "output_tokens": 400, "calls": 1}
+  ],
+  "failure_modes": [
+    {"id": "wrong-route", "description": "A refund request is routed to the plain-answer path and the customer is told it is done.", "component": "router-model", "mitigation": "refund-gate"},
+    {"id": "stale-policy", "description": "An answer quotes a policy that has since changed.", "component": "policy-kb", "mitigation": "audit"},
+    {"id": "pii-leak", "description": "Personal data reaches a model or a log.", "component": "answer-model", "mitigation": "pii-filter"}
+  ],
+  "threats": [
+    {"owasp": "LLM01", "component": "answer-model", "mitigation": "pii-filter", "note": "customer text is untrusted input"},
+    {"owasp": "LLM02", "component": "answer-model", "mitigation": "pii-filter", "note": "personal data in prompts"},
+    {"owasp": "LLM06", "component": "orders-tool", "mitigation": "refund-gate", "note": "write access to orders"}
+  ],
+  "eval_plan": [
+    {"metric": "routing accuracy", "method": "200 labelled tickets, rerun on every prompt change", "threshold": ">= 0.95"},
+    {"metric": "refund-gate coverage", "method": "replay of refund requests; no refund without an approval record", "threshold": "100%"}
+  ],
+  "observability": ["traces per request", "cost per request", "approval latency", "refund approvals and rejections"],
+  "deployment": {"runtime": "container behind the support portal", "notes": "The gate is a queue in the support tool, not a model."}
+}

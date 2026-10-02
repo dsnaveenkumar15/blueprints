@@ -1,0 +1,47 @@
+{
+  "id": "dispute-handling",
+  "title": "Payment dispute handling with human decisions",
+  "summary": "Classifies a payment dispute, assesses the evidence against policy and prepares a recommendation that a case worker decides.",
+  "use_case": "financial services",
+  "version": 1,
+  "changelog": ["v1: seed"],
+  "profile": {"latency": "near_real_time", "volume_per_day": 800, "risk": "high", "data_sensitivity": "regulated", "autonomy": "act_with_approval", "budget_usd_month": 3000, "capabilities": ["read", "write", "payment"], "open_ended": false, "task_kinds": 2, "parallelizable": false, "knowledge": true, "quality_critical": true},
+  "topology": "router",
+  "patterns": ["routing", "rag", "hitl-approval"],
+  "components": [
+    {"id": "intake-model", "role": "classify the dispute type and extract the claimed facts", "kind": "model", "name": "Dispute intake", "model": "claude-haiku-4-5", "capabilities": [], "mitigations": []},
+    {"id": "analyst-model", "role": "assess the evidence against policy and draft a recommendation", "kind": "model", "name": "Evidence analyst", "model": "claude-opus-5-5", "capabilities": [], "mitigations": []},
+    {"id": "policy-kb", "role": "dispute rules and past decisions", "kind": "retrieval", "name": "Policy and precedent index", "capabilities": ["read"], "mitigations": []},
+    {"id": "case-tool", "role": "read and update the dispute case", "kind": "tool", "name": "Case system", "capabilities": ["read", "write"], "mitigations": [{"capability": "write", "by": "decision-gate"}]},
+    {"id": "ledger-tool", "role": "post a refund or a chargeback to the ledger", "kind": "tool", "name": "Ledger", "capabilities": ["payment"], "mitigations": [{"capability": "payment", "by": "decision-gate"}]},
+    {"id": "decision-gate", "role": "a case worker decides every outcome", "kind": "human_gate", "name": "Case decision", "capabilities": [], "mitigations": []}
+  ],
+  "guardrails": [
+    {"id": "redact", "kind": "input_filter", "protects": ["intake-model", "analyst-model"], "description": "Account and card numbers are tokenised before any model sees the case."},
+    {"id": "disclosure-check", "kind": "output_filter", "protects": ["analyst-model"], "description": "Blocks recommendations that quote personal data or internal fraud rules."},
+    {"id": "audit", "kind": "audit_log", "protects": ["case-tool", "ledger-tool"], "description": "Every read, update and posting is logged with the case id and the decider."}
+  ],
+  "flow": [
+    {"id": "intake", "component": "intake-model", "input_tokens": 1200, "output_tokens": 200, "calls": 1},
+    {"id": "assess", "component": "analyst-model", "input_tokens": 6000, "output_tokens": 900, "calls": 1}
+  ],
+  "failure_modes": [
+    {"id": "wrong-category", "description": "A dispute is classified under the wrong rule set.", "component": "intake-model", "mitigation": "decision-gate"},
+    {"id": "missed-evidence", "description": "The assessment ignores a document that changes the outcome.", "component": "analyst-model", "mitigation": "decision-gate"},
+    {"id": "data-leak", "description": "A recommendation exposes personal data or internal rules.", "component": "analyst-model", "mitigation": "disclosure-check"},
+    {"id": "untraceable-decision", "description": "A posting cannot be traced to a person and a case.", "component": "ledger-tool", "mitigation": "audit"}
+  ],
+  "threats": [
+    {"owasp": "LLM01", "component": "intake-model", "mitigation": "redact", "note": "customer-submitted text is untrusted"},
+    {"owasp": "LLM02", "component": "analyst-model", "mitigation": "disclosure-check", "note": "sensitive data in outputs"},
+    {"owasp": "LLM06", "component": "ledger-tool", "mitigation": "decision-gate", "note": "money movement"},
+    {"owasp": "LLM09", "component": "analyst-model", "mitigation": "decision-gate", "note": "a person checks every recommendation"}
+  ],
+  "eval_plan": [
+    {"metric": "classification accuracy", "method": "500 labelled historical disputes", "threshold": ">= 0.95"},
+    {"metric": "recommendation agreement", "method": "case workers compare recommendations with their own decision on a blind sample", "threshold": ">= 0.85"},
+    {"metric": "gate coverage", "method": "replay; no posting without a decision record", "threshold": "100%"}
+  ],
+  "observability": ["traces per case", "gate decisions and overrides", "disclosure-check blocks", "time to decision"],
+  "deployment": {"runtime": "service inside the regulated network", "notes": "No outbound calls except to the model gateway."}
+}

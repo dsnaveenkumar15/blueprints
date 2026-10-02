@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ row.id }} v{{ row.version }} · admin{% endblock %}
+{% block content %}
+<p><a href="/admin">← admin</a></p>
+<h1>{{ b.title or row.id }} <span class="badge">v{{ row.version }}</span> <span class="badge">{{ row.status }}</span></h1>
+<p>{{ b.summary }}</p>
+<p class="mono muted">{{ row.source }} · {{ row.reason }}{% if row.provenance %} · {{ row.provenance }}{% endif %}</p>
+
+{% if issues %}<div class="notice"><strong>Open reviewer issues</strong><ul>{% for i in issues %}<li>{{ i }}</li>{% endfor %}</ul></div>{% endif %}
+
+<h2>Linter today</h2>
+<p>{{ "OK" if today.ok else "FAILS" }} · {{ today.errors }} error{{ "s" if today.errors != 1 }}, {{ today.warnings }} warning{{ "s" if today.warnings != 1 }}. Stored verdict at generation: {{ "OK" if row.lint.ok else "FAILED" }}.</p>
+<table>
+  {% for v in today.violations %}<tr class="mono"><td>{{ v.severity }}</td><td>{{ v.rule }}</td><td>{{ v.path }}</td><td>{{ v.message }}</td></tr>{% else %}<tr><td class="muted">no violations</td></tr>{% endfor %}
+</table>
+
+{% if decision %}
+<h2>Why this topology</h2>
+<ol>{% for t in decision.trace %}<li><span class="mono">{{ t.rule }}</span>: {{ t.effect }} <span class="muted">({{ t.because }})</span></li>{% endfor %}</ol>
+{% endif %}
+{% if cost %}
+<h2>Cost</h2>
+<p class="mono">{% if cost.complete %}${{ "%.4f"|format(cost.per_request_usd) }} per request · ${{ "%.2f"|format(cost.monthly_usd) }} / month · ~{{ cost.latency_s }} s{% else %}incomplete: unpriced steps {{ cost.unpriced|join(", ") }}{% endif %}</p>
+{% endif %}
+{% if diagram %}<details open><summary>Diagram source (Mermaid)</summary><pre class="mono">{{ diagram }}</pre></details>{% endif %}
+
+<h2>Components</h2>
+<table>
+  {% for comp in b.components or [] %}<tr><td class="mono">{{ comp.id }}</td><td>{{ comp.name }}</td><td class="mono">{{ comp.kind }}</td><td class="mono">{{ comp.model or comp.tool_ref or comp.framework_ref or "" }}</td></tr>{% endfor %}
+</table>
+
+{% if entry and entry.state == "open" %}
+<h2>Decision</h2>
+<form method="post" action="/admin/reviews/{{ entry.id }}">
+  <input type="text" name="note" placeholder="note">
+  <button name="decision" value="approved">approve</button>
+  <button name="decision" value="rejected">reject</button>
+</form>
+{% elif entry %}<p>Decision: <span class="badge">{{ entry.state }}</span></p>{% endif %}
+{% endblock %}

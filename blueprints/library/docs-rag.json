@@ -1,0 +1,41 @@
+{
+  "id": "docs-rag",
+  "title": "Documentation Q&A with cited answers",
+  "summary": "Rewrites the question, retrieves documentation passages and answers only with citations to them.",
+  "use_case": "developer documentation",
+  "version": 1,
+  "changelog": ["v1: seed"],
+  "profile": {"latency": "interactive", "volume_per_day": 20000, "risk": "low", "data_sensitivity": "internal", "autonomy": "suggest", "budget_usd_month": 3000, "capabilities": ["read"], "open_ended": false, "task_kinds": 1, "parallelizable": false, "knowledge": true, "quality_critical": false},
+  "topology": "workflow",
+  "patterns": ["prompt-chaining", "rag"],
+  "components": [
+    {"id": "rewrite-model", "role": "turn the question into a search query", "kind": "model", "name": "Query rewriter", "model": "claude-haiku-4-5", "capabilities": [], "mitigations": []},
+    {"id": "answer-model", "role": "answer from the retrieved passages and cite them", "kind": "model", "name": "Answer writer", "model": "claude-haiku-4-5", "capabilities": [], "mitigations": []},
+    {"id": "docs-index", "role": "hybrid keyword and embedding index of the documentation", "kind": "retrieval", "name": "Documentation index", "capabilities": ["read"], "mitigations": []}
+  ],
+  "guardrails": [
+    {"id": "rate", "kind": "rate_limit", "protects": ["rewrite-model", "answer-model"], "description": "Per-user and global request caps keep spend bounded."},
+    {"id": "citations", "kind": "output_filter", "protects": ["answer-model"], "description": "Drops any answer sentence that does not cite a retrieved passage."}
+  ],
+  "flow": [
+    {"id": "rewrite", "component": "rewrite-model", "input_tokens": 400, "output_tokens": 40, "calls": 1},
+    {"id": "answer", "component": "answer-model", "input_tokens": 3000, "output_tokens": 350, "calls": 1}
+  ],
+  "failure_modes": [
+    {"id": "wrong-passages", "description": "Retrieval returns passages that do not contain the answer.", "component": "docs-index", "mitigation": "citations"},
+    {"id": "invented-answer", "description": "The model answers from memory instead of the passages.", "component": "answer-model", "mitigation": "citations"},
+    {"id": "cost-spike", "description": "A traffic burst multiplies model spend.", "component": "answer-model", "mitigation": "rate"}
+  ],
+  "threats": [
+    {"owasp": "LLM01", "component": "answer-model", "mitigation": "citations", "note": "documentation pages can carry instructions"},
+    {"owasp": "LLM08", "component": "docs-index", "mitigation": "citations", "note": "poisoned or stale passages"},
+    {"owasp": "LLM09", "component": "answer-model", "mitigation": "citations", "note": "uncited claims are removed"},
+    {"owasp": "LLM10", "component": "answer-model", "mitigation": "rate", "note": "unbounded consumption"}
+  ],
+  "eval_plan": [
+    {"metric": "retrieval recall at 5", "method": "300 questions with known source pages", "threshold": ">= 0.85"},
+    {"metric": "faithfulness", "method": "sampled answers graded against their cited passages", "threshold": ">= 0.95"}
+  ],
+  "observability": ["traces per question", "retrieval scores", "uncited sentences removed", "cost per question"],
+  "deployment": {"runtime": "stateless service with a managed index", "notes": "Reindex on every documentation release."}
+}

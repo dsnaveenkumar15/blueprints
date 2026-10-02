@@ -1,0 +1,42 @@
+{% extends "blueprints_base.html" %}
+{% block content %}
+<h1>Library</h1>
+{% if total == 0 %}
+<p class="muted">No blueprints published yet.</p>
+{% else %}
+<form class="filters" method="get" action="/">
+  {% for field, label in [("use_case", "use case"), ("risk", "risk"), ("topology", "topology")] %}
+  <label>{{ label }}
+    <select name="{{ field }}">
+      <option value="">any</option>
+      {% for v in options[field] %}<option value="{{ v }}"{% if chosen[field] == v %} selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+  </label>
+  {% endfor %}
+  <button>filter</button>
+</form>
+{% if total > 1 %}
+<form class="filters" method="get" action="/compare">
+  <label>compare <select name="a">{% for b in choices %}<option value="{{ b.id }}">{{ b.title }}</option>{% endfor %}</select></label>
+  <label>with <select name="b">{% for b in choices %}<option value="{{ b.id }}">{{ b.title }}</option>{% endfor %}</select></label>
+  <button>compare</button>
+</form>
+{% endif %}
+{% if rows %}
+<table>
+  <tr><th>blueprint</th><th>use case</th><th>topology</th><th>risk</th><th>est. / month</th><th></th></tr>
+  {% for b in rows %}
+  <tr>
+    <td><a href="/b/{{ b.id }}">{{ b.title }}</a><br><span class="muted">{{ b.summary }}</span></td>
+    <td>{{ b.use_case }}</td><td class="mono">{{ b.topology }}</td><td class="mono">{{ b.risk }}</td>
+    <td class="mono">{% if b.monthly_usd is not none %}${{ "%.0f"|format(b.monthly_usd) }}{% else %}n/a{% endif %}</td>
+    <td>{% if b.refresh_pending %}<span class="badge">refresh queued</span>{% endif %}{% if b.lint_ok_now is false %} <span class="badge">fails linter today</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No blueprint matches these filters.</p>
+{% endif %}
+{% endif %}
+{% if skipped %}<p class="notice">{{ skipped }} blueprint{{ "s" if skipped != 1 }} could not be shown and {{ "are" if skipped != 1 else "is" }} being looked at.</p>{% endif %}
+{% endblock %}

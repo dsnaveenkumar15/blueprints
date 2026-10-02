@@ -1,0 +1,15 @@
+{% extends "blueprints_base.html" %}
+{% block title %}Patterns · {{ meta.name }}{% endblock %}
+{% block content %}
+<h1>Patterns</h1>
+{% for p in patterns %}
+<section class="finding">
+  <h2>{{ p.name }} <span class="badge">{{ p.status }}</span></h2>
+  <p><strong>When to use.</strong> {{ p.when_to_use }}</p>
+  <p><strong>When not to.</strong> {{ p.when_not_to_use }}</p>
+  <p><strong>Failure modes.</strong></p>
+  <ul>{% for f in p.failure_modes or [] %}<li>{{ f }}</li>{% endfor %}</ul>
+  {% if p.cost_profile %}<p class="muted">Cost profile: {{ p.cost_profile.calls_multiplier }}x calls, {{ p.cost_profile.latency_multiplier }}x latency. {{ p.cost_profile.note }}</p>{% endif %}
+</section>
+{% else %}<p class="muted">No patterns published yet.</p>{% endfor %}
+{% endblock %}

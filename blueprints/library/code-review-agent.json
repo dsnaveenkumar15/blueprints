@@ -1,0 +1,42 @@
+{
+  "id": "code-review-agent",
+  "title": "Code review agent with a maintainer gate",
+  "summary": "Plans a review of a pull request, reviews files in parallel and posts comments only after a maintainer approves.",
+  "use_case": "software engineering",
+  "version": 1,
+  "changelog": ["v1: seed"],
+  "profile": {"latency": "batch", "volume_per_day": 300, "risk": "medium", "data_sensitivity": "internal", "autonomy": "act_with_approval", "budget_usd_month": 1500, "capabilities": ["read", "write"], "open_ended": true, "task_kinds": 1, "parallelizable": true, "knowledge": false, "quality_critical": false},
+  "topology": "orchestrator-workers",
+  "patterns": ["orchestrator-workers", "parallelization", "hitl-approval"],
+  "components": [
+    {"id": "planner-model", "role": "split the pull request into review tasks", "kind": "model", "name": "Review planner", "model": "claude-opus-5-5", "capabilities": [], "mitigations": []},
+    {"id": "reviewer-model", "role": "review one file or one concern and propose comments", "kind": "model", "name": "File reviewer", "model": "claude-sonnet-5-5", "capabilities": [], "mitigations": []},
+    {"id": "repo-reader", "role": "read the diff and surrounding files", "kind": "tool", "name": "Repository reader", "capabilities": ["read"], "mitigations": []},
+    {"id": "pr-commenter", "role": "post review comments on the pull request", "kind": "tool", "name": "Pull request commenter", "capabilities": ["write"], "mitigations": [{"capability": "write", "by": "post-gate"}]},
+    {"id": "post-gate", "role": "a maintainer approves the comments before they are posted", "kind": "human_gate", "name": "Comment approval", "capabilities": [], "mitigations": []}
+  ],
+  "guardrails": [
+    {"id": "budget", "kind": "rate_limit", "protects": ["planner-model", "reviewer-model"], "description": "A token and file-count cap per pull request stops runaway fan-out."},
+    {"id": "audit", "kind": "audit_log", "protects": ["pr-commenter"], "description": "Every posted comment is logged with the plan step that produced it."}
+  ],
+  "flow": [
+    {"id": "plan", "component": "planner-model", "input_tokens": 4000, "output_tokens": 600, "calls": 1},
+    {"id": "review", "component": "reviewer-model", "input_tokens": 6000, "output_tokens": 800, "calls": 8}
+  ],
+  "failure_modes": [
+    {"id": "bad-plan", "description": "The plan skips the risky files.", "component": "planner-model", "mitigation": "post-gate"},
+    {"id": "noisy-comments", "description": "Reviewers post many low-value or wrong comments.", "component": "reviewer-model", "mitigation": "post-gate"},
+    {"id": "runaway-fanout", "description": "The planner spawns far more review tasks than the change needs.", "component": "planner-model", "mitigation": "budget"}
+  ],
+  "threats": [
+    {"owasp": "LLM01", "component": "reviewer-model", "mitigation": "post-gate", "note": "code and comments under review can carry instructions"},
+    {"owasp": "LLM06", "component": "pr-commenter", "mitigation": "post-gate", "note": "write access to the pull request"},
+    {"owasp": "LLM10", "component": "planner-model", "mitigation": "budget", "note": "unbounded fan-out"}
+  ],
+  "eval_plan": [
+    {"metric": "comment precision", "method": "maintainers label a sample of proposed comments", "threshold": ">= 0.7"},
+    {"metric": "seeded-bug recall", "method": "pull requests with known injected defects", "threshold": ">= 0.6"}
+  ],
+  "observability": ["traces per pull request", "comments proposed versus approved", "tokens per pull request"],
+  "deployment": {"runtime": "worker triggered by pull request events", "notes": "Comments are held in a queue until approved."}
+}

@@ -1,0 +1,35 @@
+{% extends "blueprints_base.html" %}
+{% block title %}Custom blueprint · {{ meta.name }}{% endblock %}
+{% block content %}
+<h1>Custom blueprint</h1>
+<p>Describe your requirements and Claude drafts a blueprint for them, from your browser with your own Anthropic API key. The key goes only to api.anthropic.com; it is never sent to this site and never stored. This site checks the draft with the same linter, decision rules and cost model as the library and shows the verdict. Nothing you make here is saved or published.</p>
+<form id="custom-form">
+  <label>Title <input type="text" name="title" maxlength="120" value="My system" required></label>
+  <label>Notes for the designer (optional, max 2000 characters)<textarea name="notes" maxlength="2000"></textarea></label>
+  <div class="cols">
+    <label>Latency <select name="latency"><option value="interactive">interactive</option><option value="near_real_time">near real time</option><option value="batch">batch</option></select></label>
+    <label>Requests per day <input type="number" name="volume_per_day" min="1" max="100000000" value="1000"></label>
+    <label>Risk <select name="risk"><option>low</option><option selected>medium</option><option>high</option></select></label>
+    <label>Data <select name="data_sensitivity"><option>public</option><option selected>internal</option><option>pii</option><option>regulated</option></select></label>
+    <label>Autonomy <select name="autonomy"><option value="suggest">suggest</option><option value="act_with_approval">act with approval</option><option value="act_autonomously">act autonomously</option></select></label>
+    <label>Budget (USD / month) <input type="number" name="budget_usd_month" min="0" max="10000000" value="1000"></label>
+    <label>Kinds of request <input type="number" name="task_kinds" min="1" max="50" value="1"></label>
+  </div>
+  <fieldset><legend>Capabilities</legend>
+    {% for cap in ["read", "write", "exec", "network", "payment"] %}<label><input type="checkbox" name="capabilities" value="{{ cap }}"> {{ cap }}</label> {% endfor %}
+  </fieldset>
+  <fieldset><legend>Shape of the task</legend>
+    <label><input type="checkbox" name="open_ended"> open-ended</label>
+    <label><input type="checkbox" name="parallelizable"> subtasks can run in parallel</label>
+    <label><input type="checkbox" name="knowledge"> needs a knowledge base</label>
+    <label><input type="checkbox" name="quality_critical"> quality-critical</label>
+  </fieldset>
+  <p>
+    <select name="model" aria-label="Claude model">{% for m in byok_models %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select>
+    <input type="password" id="byok-key" autocomplete="new-password" aria-label="Anthropic API key" placeholder="sk-ant-..." required>
+    <button type="submit">draft my blueprint</button>
+  </p>
+</form>
+<section id="custom-result" aria-live="polite"></section>
+<script src="/static/blueprints-custom.js"></script>
+{% endblock %}

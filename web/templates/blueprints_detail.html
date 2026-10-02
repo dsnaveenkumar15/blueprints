@@ -1,0 +1,101 @@
+{% extends "blueprints_base.html" %}
+{% block title %}{{ e.title }} · {{ meta.name }}{% endblock %}
+{% block content %}
+{% set c = e.cost %}
+<h1>{{ e.title }}</h1>
+<p>{{ e.summary }}</p>
+<p>
+  <span class="badge">{{ e.topology }}</span> <span class="badge">risk {{ e.risk }}</span>
+  <span class="badge">v{{ e.version }}</span> <span class="badge">{{ e.use_case }}</span>
+  <span class="badge mono">{{ e.source }}{% if e.provenance.model %} · {{ e.provenance.model }}{% endif %}{% if e.provenance.approval_id %} · approval #{{ e.provenance.approval_id }}{% endif %}{% if e.provenance.prompts %} · {{ e.provenance.prompts|join(" ") }}{% endif %}</span>
+</p>
+{% if e.refresh_pending %}<div class="notice">A refresh is queued: {{ e.refresh_pending.reason }}. This version stays available until the new one is approved.</div>{% endif %}
+{% if not e.lint_now.ok %}<div class="notice">This blueprint fails today's linter ({{ e.lint_now.errors }} error{{ "s" if e.lint_now.errors != 1 }}) against current Trust and Radar data. A refresh will follow.
+  <ul>{% for v in e.lint_now.violations if v.severity == "error" %}<li class="mono">{{ v.rule }} · {{ v.path }} · {{ v.message }}</li>{% endfor %}</ul></div>{% endif %}
+
+<h2>Why this topology</h2>
+<ol>{% for t in e.decision.trace %}<li><span class="mono">{{ t.rule }}</span>: {{ t.effect }} <span class="muted">({{ t.because }})</span></li>{% endfor %}</ol>
+{% if e.decision.mandatory %}<p>Mandatory controls: {% for m in e.decision.mandatory %}<span class="badge">{{ m.kind }}</span> {% endfor %}</p>{% endif %}
+
+<h2>Flow</h2>
+<ol>{% for s in b.flow %}<li><span class="mono">{{ s.id }}</span> → {{ names.get(s.component, s.component) }} <span class="muted">· {{ s.input_tokens }} in / {{ s.output_tokens }} out{% if s.calls != 1 %} × {{ s.calls }}{% endif %}</span></li>{% endfor %}</ol>
+<details><summary>Diagram source (Mermaid)</summary><pre class="mono">{{ e.diagram }}</pre></details>
+
+<h2>Components</h2>
+<table>
+  <tr><th>id</th><th>name</th><th>kind</th><th>role</th><th>model / tool / framework</th></tr>
+  {% for comp in b.components %}
+  <tr>
+    <td class="mono">{{ comp.id }}</td><td>{{ comp.name }}</td><td class="mono">{{ comp.kind }}</td><td>{{ comp.role }}</td>
+    <td class="mono">
+      {% if comp.model %}{{ comp.model }}{% endif %}
+      {% if comp.tool_ref %}{% set t = tools.get(comp.id) %}{% set g = t.grade if t and t.grade else none %}
+        {{ comp.tool_ref }} <span class="grade grade-{{ g or 'none' }}">{{ g or "?" }}</span> {{ "recommended" if t and t.recommended else "not recommended" }}{% endif %}
+      {% if comp.framework_ref %}{% set f = frameworks.get(comp.id) %}
+        {{ comp.framework_ref }}{% if f and f.latest_stable %} latest {{ f.latest_stable }}{% endif %}{% if f and f.advisories %} · {{ f.advisories|length }} recent advisor{{ "ies" if f.advisories|length != 1 else "y" }}{% endif %}{% if f and f.last_breaking %} · last breaking change noted{% endif %}{% if f and not f.tracked %} · not tracked by Radar{% endif %}{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>Guardrails</h2>
+<table>
+  <tr><th>id</th><th>kind</th><th>protects</th><th>what it does</th></tr>
+  {% for g in b.guardrails or [] %}<tr><td class="mono">{{ g.id }}</td><td class="mono">{{ g.kind }}</td><td class="mono">{{ g.protects|join(", ") }}</td><td>{{ g.description }}</td></tr>{% else %}<tr><td colspan="4" class="muted">none</td></tr>{% endfor %}
+</table>
+
+<h2>Failure modes</h2>
+<table>
+  <tr><th>failure</th><th>component</th><th>mitigated by</th></tr>
+  {% for f in b.failure_modes %}<tr><td>{{ f.description }}</td><td class="mono">{{ names.get(f.component, f.component) }}</td><td class="mono">{{ f.mitigation }}</td></tr>{% endfor %}
+</table>
+
+<h2>Threats</h2>
+<table>
+  <tr><th>OWASP</th><th>component</th><th>mitigated by</th><th>note</th></tr>
+  {% for t in b.threats or [] %}<tr><td class="mono">{{ t.owasp }}{% if owasp.get(t.owasp) %} {{ owasp[t.owasp] }}{% endif %}</td><td class="mono">{{ names.get(t.component, t.component) }}</td><td class="mono">{{ t.mitigation }}</td><td>{{ t.note }}</td></tr>{% else %}<tr><td colspan="4" class="muted">none mapped</td></tr>{% endfor %}
+</table>
+
+<h2>Eval plan</h2>
+<table>
+  <tr><th>metric</th><th>method</th><th>threshold</th></tr>
+  {% for ev in b.eval_plan or [] %}<tr><td>{{ ev.metric }}</td><td>{{ ev.method }}</td><td class="mono">{{ ev.threshold }}</td></tr>{% endfor %}
+</table>
+
+<h2>Observability and deployment</h2>
+<ul>{% for o in b.observability or [] %}<li>{{ o }}</li>{% endfor %}</ul>
+{% if b.deployment %}<p>{{ b.deployment.runtime }}{% if b.deployment.notes %} · {{ b.deployment.notes }}{% endif %}</p>{% endif %}
+
+<section id="cost">
+<h2>Estimated cost</h2>
+{% if c.complete %}
+<p class="mono">${{ "%.4f"|format(c.per_request_usd) }} per request · ${{ "%.2f"|format(c.monthly_usd) }} / month at {{ c.volume_per_day }} requests/day · ~{{ c.latency_s }} s end to end</p>
+{% else %}<p class="notice">Cost is incomplete: no price for the model in step{{ "s" if c.unpriced|length != 1 }} {{ c.unpriced|join(", ") }}.</p>{% endif %}
+{% if c.over_budget %}<p class="notice">Over the stated budget of ${{ c.budget_usd_month }} per month.</p>{% endif %}
+{% if c.pricing.stale %}<p class="notice">Prices may be out of date: the table is from {{ c.pricing.as_of }}.</p>{% endif %}
+<p class="muted">Prices as of {{ c.pricing.as_of }}{% set src = (c.pricing.source or "")|safe_url %}{% if src %} · <a href="{{ src }}" rel="nofollow noopener">source</a>{% endif %} · latency is {{ c.pricing.latency_status or "assumed" }}.</p>
+<ul class="muted">{% for a in c.assumptions %}<li>{{ a }}</li>{% endfor %}</ul>
+<div id="cost-tools">
+  <label>Volume <input type="range" id="volume" min="0" max="800" step="1" value="0"> <span id="volume-label" class="mono"></span></label>
+  <label>Tokens <input type="range" id="scale" min="0.1" max="10" step="0.05" value="1"> <span id="scale-label" class="mono"></span></label>
+  <p id="cost-live" class="mono"></p>
+  <script id="cost-data" type="application/json">{{ cost_data|tojson }}</script>
+  <noscript><p class="muted">Turn on JavaScript to move the sliders; the numbers above use the stated volume.</p></noscript>
+</div>
+</section>
+
+<section id="starter">
+<h2>Runnable starter</h2>
+{% if e.starter.app %}
+<p>LangGraph skeleton pinned to <span class="mono">{{ e.starter.requirements|trim }}</span>. Every graph-building LangGraph symbol it uses was checked against Radar's API snapshot of that version.
+  <a href="/b/{{ e.id }}/starter/app.py">app.py</a> · <a href="/b/{{ e.id }}/starter/requirements.txt">requirements.txt</a> · <a href="/b/{{ e.id }}/starter/README.md">README.md</a></p>
+<details><summary>Show app.py</summary><pre class="mono">{{ e.starter.app }}</pre></details>
+{% else %}
+<p class="muted">No starter is offered: {{ e.starter.unavailable or "Radar has not published API data for LangGraph yet" }}.</p>
+{% endif %}
+</section>
+
+<h2>Changelog</h2>
+<ul>{% for line in b.changelog or [] %}<li>{{ line }}</li>{% endfor %}</ul>
+<script src="/static/blueprints-cost.js"></script>
+{% endblock %}

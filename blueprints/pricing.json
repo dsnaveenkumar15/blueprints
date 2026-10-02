@@ -1,0 +1,13 @@
+{
+  "as_of": "2026-10-01",
+  "source": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+  "max_age_days": 45,
+  "latency_status": "assumed",
+  "models": {
+    "claude-fable-5-1": {"label": "Claude Fable 5.1", "input_per_mtok": 10.0, "output_per_mtok": 50.0, "ttft_s": 1.5, "tokens_per_s": 50},
+    "claude-opus-5-5": {"label": "Claude Opus 5.5", "input_per_mtok": 4.0, "output_per_mtok": 20.0, "ttft_s": 1.2, "tokens_per_s": 60},
+    "claude-sonnet-5-5": {"label": "Claude Sonnet 5.5", "input_per_mtok": 2.0, "output_per_mtok": 10.0, "ttft_s": 0.8, "tokens_per_s": 80},
+    "claude-haiku-4-5": {"label": "Claude Haiku 4.5", "input_per_mtok": 1.0, "output_per_mtok": 5.0, "ttft_s": 0.5, "tokens_per_s": 150},
+    "ollama-qwen2.5-1.5b": {"label": "Qwen2.5 1.5B (self-hosted Ollama)", "input_per_mtok": 0.0, "output_per_mtok": 0.0, "ttft_s": 0.3, "tokens_per_s": 25, "self_hosted": true}
+  }
+}
