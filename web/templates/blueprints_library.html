@@ -1,6 +1,35 @@
 {% extends "blueprints_base.html" %}
+{% block hero_visual %}{% if choices %}{% set b = choices[0] %}
+<figure class="window" aria-label="Example blueprint">
+  <figcaption class="window-head"><span>Blueprint</span>{% if b.lint_ok_now is false %}<span class="chip chip-bad">Fails linter today</span>{% else %}<span class="chip chip-ok">Passes linter</span>{% endif %}</figcaption>
+  <div class="window-body">
+    <p class="window-title"><a href="/b/{{ b.id }}">{{ b.title }}</a></p>
+    <svg class="topology" viewBox="0 0 320 120" role="img" aria-label="{{ b.topology }} topology">
+      {% if b.topology == "workflow" %}
+      <g class="edge"><path d="M86 60H118M202 60H234"/></g>
+      <g class="node"><rect x="12" y="42" width="74" height="36" rx="8"/><rect x="123" y="42" width="74" height="36" rx="8"/><rect x="234" y="42" width="74" height="36" rx="8"/></g>
+      <g class="label"><text x="49" y="64">Step 1</text><text x="160" y="64">Step 2</text><text x="271" y="64">Step 3</text></g>
+      {% elif b.topology == "router" %}
+      <g class="edge"><path d="M98 60C140 60 140 22 196 22M98 60H196M98 60C140 60 140 98 196 98"/></g>
+      <g class="node"><rect x="18" y="42" width="80" height="36" rx="8" class="hub"/><rect x="196" y="6" width="106" height="32" rx="8"/><rect x="196" y="44" width="106" height="32" rx="8"/><rect x="196" y="82" width="106" height="32" rx="8"/></g>
+      <g class="label"><text x="58" y="64">Router</text><text x="249" y="26">Route A</text><text x="249" y="64">Route B</text><text x="249" y="102">Route C</text></g>
+      {% else %}
+      <g class="edge"><path d="M100 60C130 60 130 22 160 22M100 60H160M100 60C130 60 130 98 160 98M246 22C272 22 272 60 288 60M246 60H288M246 98C272 98 272 60 288 60"/></g>
+      <g class="node"><rect x="12" y="42" width="88" height="36" rx="8" class="hub"/><rect x="160" y="8" width="86" height="28" rx="8"/><rect x="160" y="46" width="86" height="28" rx="8"/><rect x="160" y="84" width="86" height="28" rx="8"/><rect x="288" y="48" width="22" height="24" rx="6" class="hub"/></g>
+      <g class="label"><text x="56" y="64">Orchestrator</text><text x="203" y="26">Worker</text><text x="203" y="64">Worker</text><text x="203" y="102">Worker</text></g>
+      {% endif %}
+    </svg>
+    <dl class="spec">
+      <div><dt>Topology</dt><dd>{{ b.topology }}</dd></div>
+      <div><dt>Use case</dt><dd>{{ b.use_case }}</dd></div>
+      <div><dt>Risk</dt><dd>{{ b.risk | capitalize }}</dd></div>
+      <div><dt>Estimated cost</dt><dd>{% if b.monthly_usd is not none %}${{ "{:,.0f}".format(b.monthly_usd) }} per month{% else %}Not priced{% endif %}</dd></div>
+    </dl>
+  </div>
+</figure>
+{% endif %}{% endblock %}
 {% block content %}
-<h1>Library</h1>
+<h2 class="section-title">All blueprints</h2>
 {% if total == 0 %}
 <p class="muted">No blueprints published yet.</p>
 {% else %}
@@ -24,12 +53,12 @@
 {% endif %}
 {% if rows %}
 <table>
-  <tr><th>blueprint</th><th>use case</th><th>topology</th><th>risk</th><th>est. / month</th><th></th></tr>
+  <tr><th>Blueprint</th><th>Use case</th><th>Topology</th><th>Risk</th><th class="num">Per month</th><th><span class="visually-hidden">Status</span></th></tr>
   {% for b in rows %}
   <tr>
     <td><a href="/b/{{ b.id }}">{{ b.title }}</a><br><span class="muted">{{ b.summary }}</span></td>
-    <td>{{ b.use_case }}</td><td class="mono">{{ b.topology }}</td><td class="mono">{{ b.risk }}</td>
-    <td class="mono">{% if b.monthly_usd is not none %}${{ "%.0f"|format(b.monthly_usd) }}{% else %}n/a{% endif %}</td>
+    <td>{{ b.use_case }}</td><td>{{ b.topology }}</td><td><span class="status status-{{ {"high": "bad", "medium": "warn"}.get(b.risk, "quiet") }}">{{ b.risk | capitalize }}</span></td>
+    <td class="num">{% if b.monthly_usd is not none %}${{ "{:,.0f}".format(b.monthly_usd) }}{% else %}n/a{% endif %}</td>
     <td>{% if b.refresh_pending %}<span class="badge">refresh queued</span>{% endif %}{% if b.lint_ok_now is false %} <span class="badge">fails linter today</span>{% endif %}</td>
   </tr>
   {% endfor %}

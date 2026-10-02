@@ -50,7 +50,7 @@ def test_the_library_lists_every_published_blueprint_with_its_facts(settings):
     html = client(settings).get("/").text
     for blueprint_id in ("support-agent", "docs-rag", "code-review-agent", "dispute-handling"):
         assert f'href="/b/{blueprint_id}"' in html
-    assert "router" in html and "orchestrator-workers" in html and 'class="mono"' in html
+    assert "router" in html and "orchestrator-workers" in html
 
 
 def test_filters_narrow_the_list_and_unknown_values_or_keys_are_harmless(settings):
