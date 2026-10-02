@@ -33,8 +33,8 @@
 <h2>Decision</h2>
 <form method="post" action="/admin/reviews/{{ entry.id }}">
   <input type="text" name="note" placeholder="note">
-  <button name="decision" value="approved">approve</button>
-  <button name="decision" value="rejected">reject</button>
+  <button name="decision" value="approved">Approve</button>
+  <button name="decision" value="rejected">Reject</button>
 </form>
 {% elif entry %}<p>Decision: <span class="badge">{{ entry.state }}</span></p>{% endif %}
 {% endblock %}

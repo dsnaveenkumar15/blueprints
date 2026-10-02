@@ -27,7 +27,7 @@
   <p>
     <select name="model" aria-label="Model size">{% for m in byok_models %}<option value="{{ m }}">{{ m | model_label }}</option>{% endfor %}</select>
     <input type="password" id="byok-key" autocomplete="new-password" aria-label="API key" placeholder="your API key" required>
-    <button type="submit">draft my blueprint</button>
+    <button type="submit">Draft my blueprint</button>
   </p>
 </form>
 <section id="custom-result" aria-live="polite"></section>
