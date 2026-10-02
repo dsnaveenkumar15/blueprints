@@ -32,7 +32,7 @@ $env:PLANET_MODULES="blueprints.jobs"; $env:WEIGHTS="blueprints=100"
 ## Blueprints engine
 
 With `blueprints.jobs` in `PLANET_MODULES` the worker seeds the four hand-written blueprints, reacts to Trust grade
-changes and Radar breaking-change events (flagging affected blueprints and queueing a regeneration), publishes approved
+changes and Radar breaking-change events (flagging affected blueprints and queueing a regeneration; with separate apps it notices the same changes by comparing Trust's and Radar's published data with what it saw last time, read from `TRUST_DATA_ROOT` and `RADAR_DATA_ROOT`), publishes approved
 blueprints every 30 minutes, and generates one new blueprint per night from `blueprints/briefs.json` (Claude, night
 window). Every generated blueprint waits in `/admin` as a `blueprint_approval` item; only approved ones are published,
 and a draft that still fails the linter after two revisions is stored as rejected.

@@ -56,7 +56,7 @@ def build_job_types(conn, backend=None, use_llm: bool = True, data_root=None, br
     return {
         GENERATE_JOB: JobType("blueprints", generate.stages(conn, backend=backend, briefs=briefs,
                                                             context_loader=context_loader, pricing=pricing, clock=clock)),
-        REACT_JOB: JobType("blueprints", [("react", lambda job, out: living.react(conn, clock()))]),
+        REACT_JOB: JobType("blueprints", [("react", lambda job, out: living.react_all(conn, clock(), data_root))]),
         PUBLISH_JOB: JobType("blueprints", [("publish", lambda job, out: publish_library(conn, data_root, clock(), pricing))]),
         NIGHTLY_JOB: JobType("blueprints", [("pick", pick)]),
     }

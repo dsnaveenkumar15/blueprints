@@ -181,3 +181,75 @@ def test_a_failed_enqueue_leaves_no_pending_refresh_and_the_event_is_retried(db,
     monkeypatch.undo()
     assert len(living.react(db, NOW + 1)["refreshes"]) == 1
     assert db.execute("SELECT count(*) FROM jobs").fetchone()[0] == 1
+
+
+PKGS = {"pypi:langgraph": {"latest_stable": "1.2.12", "last_breaking": {"from": "1.2.9", "to": "1.2.10"}}}
+
+
+def seen(db, grades, packages, now=NOW):
+    return living.react_published(db, now, grades, packages)
+
+
+def test_the_first_look_at_published_data_is_a_baseline_not_a_trigger(db):
+    approve(db, framework_blueprint())
+    assert seen(db, {"acme/orders-mcp": "B"}, PKGS)["refreshes"] == [] and store.pending_refresh(db) == {}
+
+
+def test_a_published_grade_drop_below_b_requests_one_refresh_and_one_job(db):
+    approve(db, framework_blueprint())
+    seen(db, {"acme/orders-mcp": "B"}, PKGS)
+    r = seen(db, {"acme/orders-mcp": "C"}, PKGS, NOW + 60)
+    reason = "acme/orders-mcp is now graded C (was B)"
+    assert [x["reason"] for x in r["refreshes"]] == [reason] and store.pending_refresh(db)["refund-support"]["reason"] == reason
+    assert db.execute("SELECT count(*) FROM jobs WHERE job_type=?", (living.GENERATE_JOB,)).fetchone()[0] == 1
+    assert seen(db, {"acme/orders-mcp": "C"}, PKGS, NOW + 120)["refreshes"] == []
+
+
+def test_improvements_and_unreferenced_tools_do_nothing(db):
+    approve(db, framework_blueprint())
+    seen(db, {"acme/orders-mcp": "C", "other/server": "B"}, PKGS)
+    assert seen(db, {"acme/orders-mcp": "B", "other/server": "F"}, PKGS, NOW + 60)["refreshes"] == []
+
+
+def test_a_new_breaking_change_for_a_referenced_framework_requests_a_refresh(db):
+    approve(db, framework_blueprint())
+    seen(db, {"acme/orders-mcp": "B"}, PKGS)
+    newer = {"pypi:langgraph": {"last_breaking": {"from": "1.2.10", "to": "1.2.11"}}}
+    r = seen(db, {"acme/orders-mcp": "B"}, newer, NOW + 60)
+    assert [x["reason"] for x in r["refreshes"]] == ["pypi:langgraph 1.2.10 to 1.2.11 has breaking API changes"]
+    assert seen(db, {"acme/orders-mcp": "B"}, {"pypi:langgraph": {"last_breaking": None}}, NOW + 120)["refreshes"] == []
+
+
+def test_missing_published_data_is_not_a_change(db):
+    approve(db, framework_blueprint())
+    seen(db, {"acme/orders-mcp": "B"}, PKGS)
+    assert seen(db, {}, {}, NOW + 60)["refreshes"] == []
+    assert seen(db, {"acme/orders-mcp": "B"}, PKGS, NOW + 120)["refreshes"] == []        # the baseline survived the gap
+
+
+def test_the_event_and_the_published_data_do_not_request_the_same_refresh_twice(db):
+    approve(db, framework_blueprint())
+    seen(db, {"acme/orders-mcp": "B"}, PKGS)
+    emit(db, "trust.grade_changed", {"server_id": "acme/orders-mcp", "old_grade": "B", "new_grade": "C"}, now=NOW)
+    assert len(living.react(db, NOW + 30)["refreshes"]) == 1
+    assert seen(db, {"acme/orders-mcp": "C"}, PKGS, NOW + 60)["refreshes"] == []
+    assert db.execute("SELECT count(*) FROM jobs").fetchone()[0] == 1
+
+
+def test_react_all_reads_the_published_roots(db, tmp_path):
+    approve(db, framework_blueprint())
+    publish_trust(tmp_path, [{"repo": "acme/orders-mcp", "grade": "B"}])
+    publish_radar(tmp_path, PKGS)
+    assert living.react_all(db, NOW, tmp_path)["refreshes"] == []
+    publish_trust(tmp_path, [{"repo": "acme/orders-mcp", "grade": "D"}])
+    assert [r["reason"] for r in living.react_all(db, NOW + 60, tmp_path)["refreshes"]] == ["acme/orders-mcp is now graded D (was B)"]
+
+
+def test_the_other_planets_data_roots_come_from_the_environment(tmp_path, monkeypatch):
+    publish_trust(tmp_path / "t", [{"repo": "acme/orders-mcp", "grade": "B"}])
+    publish_radar(tmp_path / "r", PKGS)
+    assert living.load_trust_grades(tmp_path / "own") == {} and living.load_radar_packages(tmp_path / "own") == {}
+    monkeypatch.setenv("TRUST_DATA_ROOT", str(tmp_path / "t"))
+    monkeypatch.setenv("RADAR_DATA_ROOT", str(tmp_path / "r"))
+    assert living.load_trust_grades(tmp_path / "own") == {"acme/orders-mcp": "B"} and "pypi:langgraph" in living.load_radar_packages(tmp_path / "own")
+    assert living.context(tmp_path / "own")["frameworks"] == {"pypi:langgraph"}

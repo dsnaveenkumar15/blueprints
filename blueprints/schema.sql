@@ -22,3 +22,8 @@ CREATE TABLE IF NOT EXISTS blueprint_refresh (
   resolved INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (id, cause_event_id)
 );
+
+CREATE TABLE IF NOT EXISTS blueprint_watch (
+  key TEXT PRIMARY KEY,            -- grade:<tool> or breaking:<package>: the last published value seen
+  value TEXT NOT NULL
+);
