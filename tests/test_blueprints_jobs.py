@@ -43,7 +43,7 @@ def test_periodic_react_and_publish_always_and_one_nightly_pick_only_at_night(co
 
 def test_the_worker_discovers_the_module_and_seeds_the_library(conn, tmp_path):
     registry = load_registry(["blueprints.jobs"], conn)
-    assert set(registry) == {GENERATE_JOB, REACT_JOB, PUBLISH_JOB, NIGHTLY_JOB}
+    assert set(registry) == {GENERATE_JOB, REACT_JOB, PUBLISH_JOB, NIGHTLY_JOB, "blueprints.architect_expire"}
     assert [name for name, _ in registry[GENERATE_JOB].stages] == ["prepare", "refine", "record"]
     assert [s.__module__ for s in load_schedulers(["blueprints.jobs"])] == ["blueprints.jobs"]
     assert len(store.approved(conn)) == 4

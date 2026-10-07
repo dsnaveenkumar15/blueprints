@@ -1,9 +1,13 @@
 """Blueprints' part of the owner admin: the draft preview and the list of approvals the linter holds."""
+import json
+import re
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi.responses import PlainTextResponse, RedirectResponse
 
 from blueprints import store as blueprint_store
+from blueprints.architect import runs as architect_runs
 from blueprints.cost import estimate
 from blueprints.decision import decide as decide_topology
 from blueprints.diagram import to_mermaid
@@ -18,7 +22,30 @@ def section(conn, now: float) -> dict:
     blueprint_store.ensure_schema(conn)
     held = conn.execute("SELECT id, version, reason FROM blueprints WHERE status='draft' AND reason LIKE ? ORDER BY id",
                         ("%" + blueprint_store.HELD.strip(" |") + "%",)).fetchall()
-    return {"held": held}
+    architect_runs.STORE.ensure_schema(conn)
+    cfg = architect_runs.load_config()
+    return {"held": held, "architect_spend": architect_runs.STORE.day_spend(conn, now), "architect_cap": cfg.daily_usd,
+            "architect_configured": cfg.enabled, "architect_switch": architect_runs.STORE.is_enabled(conn),
+            "architect_runs": architect_runs.STORE.recent(conn, 20)}
+
+
+@router.post("/architect/toggle")
+def toggle_architect(conn=Depends(get_db)):
+    architect_runs.STORE.ensure_schema(conn)
+    architect_runs.STORE.set_enabled(conn, not architect_runs.STORE.is_enabled(conn))
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.get("/architect/{run_id}/brief", response_class=PlainTextResponse)
+def architect_brief(run_id: str, conn=Depends(get_db)):
+    """A brief for blueprints/briefs.json built from the requirements profile only: the owner names it."""
+    architect_runs.STORE.ensure_schema(conn)
+    run = architect_runs.STORE.get_run(conn, run_id) if re.fullmatch(r"[0-9a-f]{32}", run_id) else None
+    if run is None or run["status"] != "passed":
+        raise HTTPException(404)
+    brief = {"id": "rename-me", "title": "Name this blueprint", "use_case": "set a use case",
+             "profile": run["result"]["brief"]["profile"]}
+    return PlainTextResponse(json.dumps(brief, indent=1) + "\n")
 
 
 @router.get("/blueprints/{blueprint_id}/{version}")

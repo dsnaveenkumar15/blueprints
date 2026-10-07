@@ -16,6 +16,7 @@ from core.worker import JobType
 REACT_JOB, REACT_EVERY_S = "blueprints.react", 1800
 PUBLISH_JOB, PUBLISH_EVERY_S = "blueprints.publish", 1800
 NIGHTLY_JOB = "blueprints.nightly"
+ARCHITECT_EXPIRE_JOB, ARCHITECT_EXPIRE_EVERY_S = "blueprints.architect_expire", 6 * 3600
 
 
 def night_key(now: float) -> str:
@@ -28,6 +29,7 @@ def schedule_periodic(conn, now: float) -> None:
     store.ensure_schema(conn)
     schedule(conn, "blueprints", REACT_JOB, REACT_EVERY_S, now=now)
     schedule(conn, "blueprints", PUBLISH_JOB, PUBLISH_EVERY_S, now=now)
+    schedule(conn, "blueprints", ARCHITECT_EXPIRE_JOB, ARCHITECT_EXPIRE_EVERY_S, now=now)
     if in_night_window(now):
         enqueue(conn, "blueprints", NIGHTLY_JOB, f"night:{night_key(now)}", {}, now=now)
 
@@ -53,7 +55,15 @@ def build_job_types(conn, backend=None, use_llm: bool = True, data_root=None, br
                 {"id": brief["id"], "reason": "new", "cause_event_id": None}, priority=1.0, now=clock())
         return {"picked": brief["id"]}
 
+    def expire_architect(job, out):
+        from blueprints.architect import runs as architect_runs      # imported here so the worker needs the agent stack only for this job
+        architect_runs.STORE.ensure_schema(conn)
+        architect_runs.STORE.expire(conn, clock())
+        architect_runs.STORE.expire_waiting(conn, clock(), architect_runs.WAIT_SECONDS)
+        return {"expired": True}
+
     return {
+        ARCHITECT_EXPIRE_JOB: JobType("blueprints", [("expire", expire_architect)]),
         GENERATE_JOB: JobType("blueprints", generate.stages(conn, backend=backend, briefs=briefs,
                                                             context_loader=context_loader, pricing=pricing, clock=clock)),
         REACT_JOB: JobType("blueprints", [("react", lambda job, out: living.react_all(conn, clock(), data_root))]),

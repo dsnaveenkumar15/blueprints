@@ -63,3 +63,25 @@ def good() -> dict:
 def context() -> dict:
     return {"trust_grades": dict(CONTEXT["trust_grades"]), "frameworks": set(CONTEXT["frameworks"]),
             "models": set(CONTEXT["models"])}
+
+
+def scripted_gateway(script: dict, prices=None, max_usd: float = 1.0, seconds: float = 60):
+    """A gateway over scripted fake models. Model names: 'free' and 'paid' serve role 'bulk' (in that order), 'strong'
+    serves 'review'. `gateway.used` records (model, usd) per call."""
+    import time
+    from core.agent.gateway import Budget, Gateway
+    from tests.agent_fakes import scripted_factory
+    used = []
+    roles = {"bulk": [m for m in ("free", "paid") if m in script], "review": [m for m in ("strong",) if m in script]}
+    gw = Gateway(roles, scripted_factory(script), {"free": (0.0, 0.0), **(prices or {})},
+                 Budget(max_usd, 10_000_000, 1, time.monotonic() + seconds),
+                 lambda model, provider, usd, tokens: used.append((model, usd)), lambda: None)
+    gw.used = used
+    return gw
+
+
+def reply(obj):
+    """A fake model reply whose content is `obj` as JSON (or `obj` itself when it is already a string)."""
+    import json
+    from tests.agent_fakes import ai
+    return ai(obj if isinstance(obj, str) else json.dumps(obj))

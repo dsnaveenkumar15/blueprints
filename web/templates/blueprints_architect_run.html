@@ -1,0 +1,117 @@
+{% extends "blueprints_base.html" %}
+{% block head %}<meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">{% endblock %}
+{% block title %}{{ (run.result.brief.title if run.result and run.result.brief else "Design") }} · Architect{% endblock %}
+{% block content %}
+{% set res = run.result or {} %}
+<div id="arch-run" data-id="{{ run.id }}" data-status="{{ run.status }}">
+{% if run.status in ("queued", "running") %}
+  <h1>Designing</h1>
+  <div class="arch-live">
+    <ol class="arch-steps canvas" id="arch-steps">{% for key, label in steps %}<li class="node" data-step="{{ key }}"><b>{{ label }}</b></li>{% endfor %}</ol>
+    <div class="arch-log">
+      <p class="mono" id="arch-totals" data-cap="{{ "%.2f"|format(run_cap) }}">paid $0.0000 of ${{ "%.2f"|format(run_cap) }}</p>
+      <ol id="arch-log" class="mono"></ol>
+    </div>
+  </div>
+  <noscript><p class="notice">Turn on JavaScript to watch the design live, or reload this page in a few minutes.</p></noscript>
+{% elif run.status == "waiting" %}
+  <h1>A few questions first</h1>
+  <p class="muted">Each answer changes the design. The suggested answers are selected; change any that are wrong.</p>
+  <form id="arch-answers" class="arch-questions">
+    {% for q in res.questions %}
+    <fieldset><legend>{{ q.text }}</legend><p class="muted">{{ q.why }}</p>
+      {% for o in q.options %}<label><input type="radio" name="{{ q.field }}" value="{{ o.index }}"{% if o.index == q.suggested %} checked{% endif %}> {{ o.label }}</label>{% endfor %}
+    </fieldset>
+    {% endfor %}
+    <p><button type="submit">Use these answers</button> <button type="button" id="arch-skip" class="btn-quiet">Skip, use your assumptions</button></p>
+    <p id="arch-error" class="notice" role="alert" hidden></p>
+  </form>
+{% elif run.status in ("passed", "not_ready") %}
+  {% set b = res.blueprint or {} %}{% set rec = res.record %}{% set cap = res.capacity %}
+  <section class="arch-verdict {{ 'is-pass' if run.status == 'passed' else 'is-fail' }}" aria-labelledby="verdict">
+    <p class="arch-badge">{{ "Passed review" if run.status == "passed" else "Not ready" }}</p>
+    <h1 id="verdict">{{ b.title or res.brief.title }}</h1>
+    <p>{{ res.reason }}</p>
+    {% if b.summary %}<p>{{ b.summary }}</p>{% endif %}
+    <p class="mono">{% if view.monthly is not none %}${{ "{:,.2f}".format(view.monthly) }} / month · ${{ "%.4f"|format(view.per_request) }} per request{% else %}Not priced{% endif %} · this design cost ${{ "%.4f"|format(run.cost_usd) }} to make</p>
+    {% if run.status == "passed" %}<p><a class="btn" href="/architect/r/{{ run.id }}.md">Download Markdown</a> <a class="btn btn-quiet" href="/architect/r/{{ run.id }}.json">Download JSON</a></p>{% endif %}
+  </section>
+  {% if b %}
+  <nav class="arch-tabs" aria-label="Sections"><a href="#design">Design</a><a href="#record">Decision record</a><a href="#capacity">Capacity</a><a href="#runbook">Runbook</a><a href="#review">Review</a><a href="#trace">Trace</a></nav>
+  <section id="design">
+    <h2>Design · {{ b.topology }}</h2>
+    {% if res.assumptions %}<p class="muted">Assumptions: {{ res.assumptions | join("; ") }}</p>{% endif %}
+    <ol class="flow-canvas canvas">{% for s in b.flow or [] %}<li class="node"><span class="node-id mono">{{ s.id }}</span><b>{{ s.component }}</b><span class="muted">{{ s.input_tokens }} in / {{ s.output_tokens }} out{% if s.calls != 1 %} × {{ s.calls }}{% endif %}</span></li>{% endfor %}</ol>
+    <h3>Components</h3>
+    <table><tr><th>id</th><th>kind</th><th>role</th><th>model / tool</th></tr>{% for c in b.components or [] %}<tr><td class="mono">{{ c.id }}</td><td class="mono">{{ c.kind }}</td><td>{{ c.role }}</td><td class="mono">{{ c.model or c.tool_ref or "" }}</td></tr>{% endfor %}</table>
+    <h3>Guardrails</h3>
+    <table><tr><th>id</th><th>kind</th><th>protects</th><th>what it does</th></tr>{% for g in b.guardrails or [] %}<tr><td class="mono">{{ g.id }}</td><td class="mono">{{ g.kind }}</td><td class="mono">{{ (g.protects or []) | join(", ") }}</td><td>{{ g.description }}</td></tr>{% else %}<tr><td colspan="4" class="muted">none</td></tr>{% endfor %}</table>
+    <h3>Failure modes</h3>
+    <table><tr><th>failure</th><th>component</th><th>mitigated by</th></tr>{% for f in b.failure_modes or [] %}<tr><td>{{ f.description }}</td><td class="mono">{{ f.component }}</td><td class="mono">{{ f.mitigation }}</td></tr>{% endfor %}</table>
+    <h3>Threats</h3>
+    <table><tr><th>OWASP</th><th>component</th><th>mitigated by</th><th>note</th></tr>{% for t in b.threats or [] %}<tr><td class="mono">{{ t.owasp }}</td><td class="mono">{{ t.component }}</td><td class="mono">{{ t.mitigation }}</td><td>{{ t.note }}</td></tr>{% endfor %}</table>
+    <h3>Evaluation and monitoring</h3>
+    <table><tr><th>metric</th><th>method</th><th>threshold</th></tr>{% for e in b.eval_plan or [] %}<tr><td>{{ e.metric }}</td><td>{{ e.method }}</td><td class="mono">{{ e.threshold }}</td></tr>{% endfor %}</table>
+    <ul>{% for o in b.observability or [] %}<li>{{ o }}</li>{% endfor %}</ul>
+    {% if res.diagram %}<details><summary>Diagram source (Mermaid)</summary><pre class="mono">{{ res.diagram }}</pre></details>{% endif %}
+  </section>
+  <section id="record">
+    <h2>Decision record</h2>
+    {% if rec %}
+    <p><b>Context.</b> {{ rec.context }}</p><p><b>Decision.</b> {{ rec.decision }}</p>
+    <h3>Alternatives considered</h3><ul>{% for a in rec.alternatives %}<li><b>{{ a.topology }}</b>: {{ a.rejected_because }}</li>{% else %}<li class="muted">The rules allow no other topology for these requirements.</li>{% endfor %}</ul>
+    <h3>Trade-offs</h3><ul>{% for t in rec.trade_offs %}<li>{{ t }}</li>{% endfor %}</ul>
+    <p class="mono">p95 latency target {{ rec.targets.latency_p95_s }} s · availability {{ rec.targets.availability_pct }}% · quality: {{ rec.targets.quality }}</p>
+    <p><b>Scaling.</b> {{ rec.scaling }}</p>
+    <h3>Rollout</h3><ol>{% for s in rec.rollout %}<li>{{ s }}</li>{% endfor %}</ol><p><b>Rollback.</b> {{ rec.rollback }}</p>
+    {% if rec.open_risks %}<h3>Open risks</h3><ul>{% for r in rec.open_risks %}<li>{{ r.text }} <span class="mono muted">({{ r.failure_mode }})</span></li>{% endfor %}</ul>{% endif %}
+    {% else %}<p class="muted">No decision record was produced.</p>{% endif %}
+  </section>
+  <section id="capacity">
+    <h2>Capacity</h2>
+    {% if cap %}
+    <p class="mono">flow latency {{ cap.latency_s }} s · target {{ cap.latency_target_s }} s</p>
+    <p><b>First limit.</b> {{ cap.first_limit.text }}</p>
+    <table><tr><th>volume</th><th>requests/day</th><th>peak req/s</th><th>concurrency</th><th>per month</th></tr>{% for s in cap.scales %}<tr class="mono"><td>{{ s.scale }}x</td><td>{{ "{:,}".format(s.volume_per_day) }}</td><td>{{ s.peak_rps }}</td><td>{{ s.concurrency }}</td><td>{% if s.monthly_usd is not none %}${{ "{:,.2f}".format(s.monthly_usd) }}{% else %}n/a{% endif %}</td></tr>{% endfor %}</table>
+    <p class="muted">Peak hour assumed at {{ cap.peak_factor }}× the daily average. Prices and latencies come from the dated price table.</p>
+    {% endif %}
+  </section>
+  <section id="runbook">
+    <h2>Runbook</h2>
+    {% if rec %}<table><tr><th>failure mode</th><th>alert</th><th>meaning</th><th>first action</th></tr>{% for r in rec.runbook %}<tr><td class="mono">{{ r.failure_mode }}</td><td>{{ r.alert }}</td><td>{{ r.meaning }}</td><td>{{ r.first_action }}</td></tr>{% endfor %}</table>{% endif %}
+  </section>
+  <section id="review">
+    <h2>Review</h2>
+    {% if res.review %}
+    {% for s in view.scores %}<div class="arch-score"><span>{{ s.area }}</span><span class="arch-bar s{{ s.score }}"></span><b class="mono">{{ s.score }}</b></div>{% endfor %}
+    <p>{{ res.review.summary }}</p>
+    {% if res.review.findings %}<ul>{% for f in res.review.findings %}<li>{% if f.blocking %}<b>Blocking</b> · {% endif %}{{ f.area }}: {{ f.problem }} <span class="muted">Fix: {{ f.fix }}</span></li>{% endfor %}</ul>{% endif %}
+    {% else %}<p class="muted">This design was not reviewed: it stopped before the review.</p>{% endif %}
+    {% if res.redteam %}<h3>Red team</h3><ul>{% for f in res.redteam %}<li><span class="mono">{{ f.severity }}</span> · {{ f.component }}: {{ f.scenario }} <span class="muted">Control: {{ f.control }}</span></li>{% endfor %}</ul>{% endif %}
+  </section>
+  <section id="trace">
+    <h2>Trace</h2>
+    <ol class="mono arch-trace">{% for e in events %}<li>{{ e.type }} · {{ e.payload | tojson }}</li>{% endfor %}</ol>
+  </section>
+  {% if res.variant %}
+  <section id="variant">
+    <h2>If the budget is tighter</h2>
+    <p>{{ res.variant.summary }}</p><ul>{% for c in res.variant.changes %}<li>{{ c }}</li>{% endfor %}</ul>
+    {% if view.variant_monthly is not none %}<p class="mono">${{ "{:,.2f}".format(view.variant_monthly) }} / month</p>{% endif %}
+  </section>
+  {% endif %}
+  {% endif %}
+  <form id="arch-refine" class="arch-refine">
+    <label for="arch-instruction"><b>Refine this design</b></label>
+    <input id="arch-instruction" maxlength="300" required placeholder="for example: budget $300 a month, or never act without approval">
+    <button type="submit">Refine</button>
+    <p id="arch-error" class="notice" role="alert" hidden></p>
+  </form>
+{% else %}
+  <h1>This design stopped</h1>
+  <p class="notice">{{ message }}</p>
+  <p><a href="/architect">Start a new design</a></p>
+{% endif %}
+</div>
+<script src="/static/blueprints-architect.js"></script>
+{% endblock %}

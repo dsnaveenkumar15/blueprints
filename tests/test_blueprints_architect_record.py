@@ -1,0 +1,78 @@
+# tests/test_blueprints_architect_record.py
+import copy
+
+import pytest
+
+pytest.importorskip("langchain_core")
+
+from blueprints.architect import consistency, record  # noqa: E402
+from blueprints.architect.capacity import capacity  # noqa: E402
+from blueprints.cost import load_pricing  # noqa: E402
+from tests.blueprint_fixtures import CONTEXT, good, reply, scripted_gateway  # noqa: E402
+
+NOW = 1_790_877_600.0
+
+
+def a_record(**changes) -> dict:
+    r = {"context": "Support team answers order questions.", "decision": "A router separates refunds from questions.",
+         "alternatives": [], "trade_offs": ["A router adds one cheap call."],
+         "targets": {"latency_p95_s": 8.0, "availability_pct": 99.5, "quality": "routing accuracy at least 0.95"},
+         "scaling": "Add answer workers horizontally; cache policy articles.",
+         "rollout": ["shadow on past tickets", "canary at five percent", "full rollout"],
+         "rollback": "Switch traffic back to the human queue.",
+         "open_risks": [{"text": "Policy drift", "failure_mode": "stale-policy"}],
+         "runbook": [{"failure_mode": "wrong-route", "alert": "routing accuracy below 0.9", "meaning": "refunds miss the gate",
+                      "first_action": "pause auto-routing"}]}
+    r.update(changes)
+    return record.Record.model_validate(r).model_dump()
+
+
+def cheaper(body):
+    v = copy.deepcopy(body)
+    v["flow"][1]["input_tokens"] = 1200
+    return v
+
+
+def check(body, rec, variant=None):
+    cap = capacity(body, load_pricing(), NOW)
+    return {p["rule"] for p in consistency.check(body, rec, cap, variant or cheaper(body), CONTEXT, load_pricing(), NOW)}
+
+
+def test_a_consistent_design_has_no_problems():
+    assert check(good(), a_record()) == set()
+
+
+@pytest.mark.parametrize("changes, rule", [
+    ({"targets": {"latency_p95_s": 1.0, "availability_pct": 99.5, "quality": "q"}}, "latency-target"),
+    ({"open_risks": [{"text": "x", "failure_mode": "no-such-mode"}]}, "risk-unmapped"),
+    ({"runbook": [{"failure_mode": "nope", "alert": "a", "meaning": "m", "first_action": "f"}]}, "runbook-unmapped"),
+    ({"scaling": "At 10x volume we need 4 replicas."}, "scaling-numbers"),
+])
+def test_each_record_mismatch_is_reported(changes, rule):
+    assert rule in check(good(), a_record(**changes))
+
+
+def test_blueprint_side_checks():
+    bp = good()
+    bp["eval_plan"] = [{"metric": "tone", "method": "manual review", "threshold": "good"}]
+    bp["observability"] = ["dashboards"]
+    bp["threats"] = [t for t in bp["threats"] if t["component"] != "orders-tool"]
+    assert {"eval-threshold", "observability-signal", "threat-missing"} <= check(bp, a_record())
+
+
+def test_the_variant_must_lint_clean_and_cost_less():
+    bp = good()
+    assert "variant-cost" in check(bp, a_record(), variant=copy.deepcopy(bp))
+    broken = cheaper(bp)
+    broken["components"] = broken["components"][:1]
+    assert "variant-lint" in check(bp, a_record(), variant=broken)
+    assert "variant-missing" in {p["rule"] for p in consistency.check(bp, a_record(), capacity(bp, load_pricing(), NOW), None,
+                                                                         CONTEXT, load_pricing(), NOW)}
+
+
+def test_code_measured_alternatives_come_first_and_keep_their_numbers():
+    gw = scripted_gateway({"free": [reply(a_record(alternatives=[{"topology": "workflow", "summary": "s",
+                                                                  "rejected_because": "model says cheaper"}]))]})
+    code_alt = [{"topology": "workflow", "summary": "Fixed steps", "rejected_because": "2.3x the monthly cost"}]
+    rec = record.write(gw, good(), capacity(good(), load_pricing(), NOW), code_alt, [])
+    assert rec["alternatives"][0]["rejected_because"] == "2.3x the monthly cost" and len(rec["alternatives"]) <= 2
