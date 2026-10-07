@@ -27,6 +27,17 @@ CASES = [
 ]
 
 
+def why(result: dict) -> str:
+    """For a design that did not pass: the case, the scores, what blocks it and what is still open (no model text beyond
+    the reviewer's own findings), so a failing case can be understood and not only counted."""
+    rv = result.get("review") or {}
+    lines = [f"  WHY {(result.get('brief') or {}).get('title', '?')}: scores {rv.get('scores')}"]
+    lines += [f"    blocking {f['area']}: {f['problem'][:200]}" for f in rv.get("findings", []) if f.get("blocking")]
+    lines += [f"    open {a['severity']} attack on {a['component']}: {a['scenario'][:160]}" for a in rv.get("residual", [])]
+    lines += [f"    check problem {p['path']}: {p['problem'][:160]}" for p in (result.get("problems") or [])[:4]]
+    return "\n".join(lines)
+
+
 def _step(work, conn, rid, emit):
     return work(conn, rid, emit)
 
@@ -59,6 +70,8 @@ def run_case(db_path: str, work, text: str) -> tuple:
             conn.close()
             return row
     run = runs.STORE.get_run(conn, rid)
+    if status != "passed":
+        print(why(result), flush=True)
     row = (status, run["cost_usd"], time.monotonic() - t, result.get("reason", ""), text)
     print(f"{status:10} ${row[1]:.4f} {row[2]:6.0f}s  {row[3][:70]} | {text[:50]}", flush=True)
     conn.close()
