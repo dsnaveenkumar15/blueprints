@@ -65,3 +65,17 @@ def test_clarify_reads_the_description_through_the_model():
     out = clarify.clarify(gw, "An agent that refunds orders.")
     assert out["profile"]["capabilities"] == ["read", "write"] and out["known"] == ["risk", "capabilities"]
     assert all(q["field"] not in ("risk", "capabilities") for q in out["questions"])
+
+
+def test_the_understanding_step_is_told_to_infer_volume_and_latency_from_cadence_words():
+    from blueprints.architect import prompts
+    text = prompts.CLARIFY_SYSTEM
+    assert "every night" in text and "volume_per_day" in text and "batch" in text and "never list a field you guessed" in text
+
+
+def test_a_nightly_job_stated_by_the_model_is_taken_as_one_request_a_day_and_not_asked_again():
+    gw = scripted_gateway({"free": [reply({"title": "Nightly digest", "use_case": "research", "profile": {"volume_per_day": 1, "latency": "batch"},
+                                           "stated": ["volume_per_day", "latency"]})]})
+    out = clarify.clarify(gw, "Every night, reads new papers and writes a digest.")
+    assert out["profile"]["volume_per_day"] == 1 and out["profile"]["latency"] == "batch"
+    assert all(q["field"] not in ("volume_per_day", "latency") for q in out["questions"])

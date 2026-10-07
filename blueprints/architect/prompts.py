@@ -14,7 +14,9 @@ CLARIFY_SYSTEM = UNTRUSTED + (
     "Read the visitor's description of an AI system. Fill in 'profile' with the values the description states or "
     "clearly implies, using only the allowed values in 'profile_fields'. List in 'stated' exactly the fields you filled "
     "from the description; never list a field you guessed. Give the system a 'title' under 60 characters and a "
-    "'use_case' of two or three words.")
+    "'use_case' of two or three words. Infer from cadence words: a scheduled job counts as its own volume (volume_per_day "
+    "1 for 'every night' or 'daily', 24 for 'hourly'), and an overnight or scheduled job is latency 'batch'; verbs imply "
+    "capabilities (issue refunds means write and payment, send an email means network).")
 REPROFILE_SYSTEM = UNTRUSTED + (
     "Apply the visitor's 'instruction' to the requirements 'profile': change only the fields the instruction is about, "
     "keep every other field, and return the full profile under 'profile' using only the allowed values.")
