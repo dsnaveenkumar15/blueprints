@@ -18,7 +18,7 @@
 {% if e.decision.mandatory %}<p>Mandatory controls: {% for m in e.decision.mandatory %}<span class="badge">{{ m.kind }}</span> {% endfor %}</p>{% endif %}
 
 <h2>Flow</h2>
-<ol>{% for s in b.flow %}<li><span class="mono">{{ s.id }}</span> → {{ names.get(s.component, s.component) }} <span class="muted">· {{ s.input_tokens }} in / {{ s.output_tokens }} out{% if s.calls != 1 %} × {{ s.calls }}{% endif %}</span></li>{% endfor %}</ol>
+<ol class="flow-canvas canvas">{% for s in b.flow %}<li class="node"><span class="node-id mono">{{ s.id }}</span><b>{{ names.get(s.component, s.component) }}</b><span class="muted">{{ s.input_tokens }} in / {{ s.output_tokens }} out{% if s.calls != 1 %} × {{ s.calls }}{% endif %}</span></li>{% endfor %}</ol>
 <details><summary>Diagram source (Mermaid)</summary><pre class="mono">{{ e.diagram }}</pre></details>
 
 <h2>Components</h2>

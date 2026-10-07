@@ -82,6 +82,10 @@ $env:DB_PATH="data/blueprints.db"; $env:DATA_ROOT="data/blueprints-published"
 ```
 then open http://blueprints.localhost:8002/.
 
+- **Look:** Blueprints has its own theme pack in `web/static/themes/blueprints/` (design canvas: dotted canvas, Manrope,
+  violet accent, light by default). The home is a gallery of canvas cards with the library filters in the hero; each
+  blueprint page draws its flow as node cards on a canvas.
+
 ## Deploy (VPS)
 
 1. DNS A record `blueprints` pointing at the VPS IP; Traefik runs on the VPS.

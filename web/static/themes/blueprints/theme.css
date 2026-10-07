@@ -1,0 +1,122 @@
+/* Blueprints: design canvas. Loaded after site.css on Blueprints pages only. Light dotted canvas, white node cards
+   with ports, violet accent, pill chips. Token blocks first (contract checked by tests/test_themes.py). */
+@font-face { font-family: "Manrope"; src: url("/static/themes/blueprints/fonts/manrope-latin.woff2") format("woff2"); font-weight: 400 800; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("/static/themes/blueprints/fonts/ibm-plex-mono-latin-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+
+.planet-blueprints {
+  --bg: #F7F8FA; --surface: #FFFFFF; --surface-2: #F0F1F6; --ink: #14161A; --ink-2: #353A44; --muted: #5E6470;
+  --rule: rgba(20, 22, 26, 0.08); --rule-2: rgba(20, 22, 26, 0.14); --field: rgba(20, 22, 26, 0.22);
+  --accent: #5252E6; --accent-ink: #FFFFFF; --accent-soft: #EEEEFE;
+  --ok: #087A55; --ok-soft: #E2F3EC; --warn: #875A00; --warn-soft: #FBF1D9; --bad: #C0262D; --bad-soft: #FCE8E8;
+  --mark: #FFE7A3; --port: #5252E6; --dot: rgba(20, 22, 26, 0.11);
+  --shadow-1: 0 1px 2px rgba(20, 22, 26, 0.05), 0 2px 10px rgba(20, 22, 26, 0.05);
+  --shadow-2: 0 2px 6px rgba(20, 22, 26, 0.06), 0 20px 44px -18px rgba(20, 22, 26, 0.22);
+  --sans: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --display: "Manrope", system-ui, sans-serif;
+  --r-sm: 10px; --r-md: 12px; --r-lg: 16px;
+}
+:root[data-theme="dark"] .planet-blueprints {
+  --bg: #0F1015; --surface: #181A22; --surface-2: #20232D; --ink: #EDEEF3; --ink-2: #C9CCD6; --muted: #9298A6;
+  --rule: rgba(237, 238, 243, 0.08); --rule-2: rgba(237, 238, 243, 0.14); --field: rgba(237, 238, 243, 0.22);
+  --accent: #8B8BFF; --accent-ink: #0F1015; --accent-soft: rgba(139, 139, 255, 0.14);
+  --ok: #3DD39B; --ok-soft: rgba(61, 211, 155, 0.13); --warn: #E2AE4A; --warn-soft: rgba(226, 174, 74, 0.14);
+  --bad: #F2777C; --bad-soft: rgba(242, 119, 124, 0.14); --mark: rgba(226, 174, 74, 0.32);
+  --port: #8B8BFF; --dot: rgba(237, 238, 243, 0.09);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 12px rgba(0, 0, 0, 0.25);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 48px -18px rgba(0, 0, 0, 0.6);
+}
+
+.planet-blueprints { font-family: var(--sans); }
+.planet-blueprints h1, .planet-blueprints h2, .planet-blueprints h3 { font-family: var(--display); font-weight: 800; letter-spacing: -0.025em; }
+.planet-blueprints .brand { font-weight: 800; }
+.planet-blueprints .brand img { border-radius: 9px; }
+.planet-blueprints .btn, .planet-blueprints button, .planet-blueprints input[type=submit] { border-radius: 999px; font-weight: 700; color: var(--accent-ink); }
+:root[data-theme="dark"] .planet-blueprints .btn, :root[data-theme="dark"] .planet-blueprints button, :root[data-theme="dark"] .planet-blueprints input[type=submit] { color: var(--accent-ink); }
+.planet-blueprints .btn-quiet, :root[data-theme="dark"] .planet-blueprints .btn-quiet { color: var(--ink); }
+.planet-blueprints table, .planet-blueprints fieldset, .planet-blueprints .notice, .planet-blueprints pre { border-radius: var(--r-lg); box-shadow: var(--shadow-1); }
+.planet-blueprints .badge, .planet-blueprints .chip { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.planet-blueprints .canvas { background-color: var(--bg); background-image: radial-gradient(var(--dot) 1px, transparent 1px); background-size: 16px 16px; }
+
+/* Home: hero with the filter bar, gallery of canvas cards, how it works, entry cards. */
+.bp-hero { grid-template-columns: 1fr; text-align: center; background-image: radial-gradient(var(--dot) 1px, transparent 1px); background-size: 16px 16px; max-width: none; padding-left: var(--gutter); padding-right: var(--gutter); }
+.bp-hero .hero-copy { max-width: 960px; margin: 0 auto; }
+.bp-hero h1 { margin: 0 auto; max-width: 18ch; font-size: clamp(36px, 5vw, 58px); }
+.bp-hero .lede { margin: 18px auto 28px; }
+.filter-bar { display: inline-flex; flex-wrap: wrap; max-width: 100%; justify-content: center; align-items: center; gap: 8px; padding: 6px; border-radius: 28px; background: var(--surface); box-shadow: var(--shadow-2); }
+.filter-bar label { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 14px; border-radius: 999px; background: var(--surface-2); font-size: 13px; font-weight: 600; color: var(--muted); }
+.filter-bar select { height: 40px; border: 0; background-color: transparent; font-weight: 700; color: var(--ink); padding-left: 2px; }
+.filter-bar select:focus { box-shadow: none; }
+.filter-bar button { height: 40px; }
+.bp-links { margin: 16px 0 0; font-size: 14px; color: var(--muted); max-width: none; }
+.bp-links a { font-weight: 700; text-decoration: none; }
+.bp-hero .byline { margin-top: 14px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; margin: 4px 0 24px; }
+.bp-card { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--shadow-1); overflow: hidden; transition: transform 160ms ease, box-shadow 160ms ease; }
+.bp-thumb { display: grid; place-items: center; height: 132px; border-bottom: 1px solid var(--rule); }
+.bp-thumb .topo { width: 86%; height: auto; }
+.topo .edge path { fill: none; stroke: var(--accent); stroke-width: 1.5; opacity: 0.55; }
+.topo .node rect { fill: var(--surface); stroke: var(--rule-2); stroke-width: 1; }
+.topo .node rect.hub { stroke: var(--accent); stroke-width: 1.5; }
+.topo .label text { font: 700 11px var(--sans); fill: var(--ink-2); text-anchor: middle; }
+.bp-body { padding: 14px 16px 16px; display: grid; gap: 6px; }
+.bp-body h3 { margin: 0; font-size: 16px; letter-spacing: -0.015em; }
+.bp-body h3 a { color: var(--ink); text-decoration: none; }
+.bp-body h3 a:hover { color: var(--accent); }
+.bp-body p { margin: 0; font-size: 14px; color: var(--muted); }
+.bp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px !important; }
+.bp-chips .chip { height: 24px; font-size: 12px; }
+.planet-blueprints .chip-ok { background: var(--ok-soft); color: var(--ok); }
+.planet-blueprints .chip-bad { background: var(--bad-soft); color: var(--bad); }
+.planet-blueprints .chip-quiet { background: var(--surface-2); color: var(--muted); font-weight: 600; }
+.compare-bar { justify-content: flex-start; }
+.flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 8px 0 0; padding: 0; list-style: none; counter-reset: flow; }
+.flow li { counter-increment: flow; max-width: none; padding: 18px 18px 18px 58px; position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-lg); }
+.flow li::before { content: counter(flow); position: absolute; left: 18px; top: 18px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 800; font-size: 13px; }
+.flow h3 { margin: 0 0 4px; font-size: 16px; }
+.flow p { margin: 0; font-size: 14px; color: var(--muted); }
+.entry-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 32px 0 0; padding: 0; list-style: none; }
+.entry-cards li { max-width: none; }
+.entry-cards a { display: grid; gap: 4px; height: 100%; padding: 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--shadow-1); color: var(--ink); text-decoration: none; }
+.entry-cards a:hover { border-color: var(--accent); text-decoration: none; }
+.entry-cards .ic { width: 24px; height: 24px; color: var(--accent); }
+.entry-cards b { margin-top: 6px; font-size: 15.5px; }
+.entry-cards span { font-size: 13.5px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .bp-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+}
+@media (max-width: 900px) {
+  .flow { grid-template-columns: 1fr; }
+  .entry-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .entry-cards { grid-template-columns: 1fr; }
+  .filter-bar { display: flex; border-radius: var(--r-lg); }
+  .filter-bar label, .filter-bar button { flex: 1 1 100%; justify-content: space-between; }
+}
+
+/* Blueprint page: the flow as node cards on a dotted canvas, joined by edges and ports. */
+.flow-canvas { display: flex; flex-wrap: wrap; gap: 18px 40px; margin: 12px 0 8px; padding: 24px; list-style: none; border: 1px solid var(--rule); border-radius: var(--r-lg); }
+.flow-canvas .node { position: relative; display: grid; gap: 2px; min-width: 170px; max-width: 240px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-md); box-shadow: var(--shadow-1); }
+.flow-canvas .node b { font-size: 14.5px; color: var(--ink); }
+.flow-canvas .node .muted { font-size: 12.5px; }
+.flow-canvas .node-id { font-size: 11px; color: var(--muted); }
+.flow-canvas .node + .node::before { content: ""; position: absolute; left: -40px; top: 50%; width: 34px; border-top: 2px solid var(--port); opacity: 0.6; }
+.flow-canvas .node::after { content: ""; position: absolute; right: -6px; top: 50%; width: 8px; height: 8px; margin-top: -5px; border-radius: 50%; background: var(--surface); border: 2px solid var(--port); }
+.flow-canvas .node:last-child::after { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .flow-canvas .node::after { animation: bp-port 2.4s ease-in-out 1; }
+  @keyframes bp-port { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 40% { box-shadow: 0 0 0 5px var(--accent-soft); } }
+}
+@media (max-width: 560px) {
+  .flow-canvas { flex-direction: column; gap: 22px; }
+  .flow-canvas .node { max-width: none; }
+  .flow-canvas .node + .node::before { left: 24px; top: -22px; width: 0; height: 18px; border-top: 0; border-left: 2px solid var(--port); }
+  .flow-canvas .node::after { display: none; }
+}
+/* Visual review fixes: four cards per row on desktop, centred hero notes. */
+.filter-bar select { max-width: 190px; text-overflow: ellipsis; }
+.gallery { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.bp-hero .bp-links, .bp-hero .byline { margin-left: auto; margin-right: auto; }
+.filter-bar label span { white-space: nowrap; }
+@media (max-width: 560px) { .filter-bar select { flex: 1; max-width: none; } .filter-bar label span { min-width: 72px; text-align: left; } }
