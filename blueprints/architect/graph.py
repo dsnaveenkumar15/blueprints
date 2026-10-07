@@ -2,7 +2,9 @@
 """The architect's design graph (spec §3 steps 3-12) on LangGraph. Code nodes compute; model nodes go through the
 gateway. Every node reports to `emit`, which powers the live trace. A model step that fails or runs out of budget ends
 the run "Not ready" with the reason; it never crashes the run."""
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable, TypedDict
 
@@ -68,6 +70,11 @@ def _reason(exc: Exception) -> str:
     return "the model service failed"
 
 
+def _locked(lock, emit, type, payload):
+    with lock:
+        emit(type, payload)
+
+
 def _timed(ctx: Context, name: str, fn):
     def node(state: State) -> dict:
         ctx.emit("node", {"name": name, "status": "start"})
@@ -87,6 +94,9 @@ def _safe(fn, *args, default=None):
 
 def build_graph(ctx: Context):
     gw = ctx.gateway
+    lock = threading.Lock()
+    emit = ctx.emit
+    ctx.emit = lambda type, payload: _locked(lock, emit, type, payload)         # worker threads report too: one writer at a time
 
     def decide_node(state):
         d = decide(state["brief"]["profile"])
@@ -109,14 +119,16 @@ def build_graph(ctx: Context):
         bodies, scored, note, out_of_budget = [], [], "", False
         for t in tops:
             ctx.emit("candidate", {"topology": t, "status": "drafting"})
+        with ThreadPoolExecutor(max_workers=len(tops)) as pool:                 # both drafts in flight together
+            futures = [(t, pool.submit(candidates.draft, gw, t, state["brief"], d, state["grounding"], previous,
+                                       state.get("instruction"))) for t in tops]
+        for t, future in futures:
             try:
-                b = candidates.draft(gw, t, state["brief"], d, state["grounding"], previous, state.get("instruction"))
+                b = future.result()
             except STEP_ERRORS as exc:
                 note = _reason(exc)
                 ctx.emit("candidate", {"topology": t, "status": "failed", "reason": note})
-                if isinstance(exc, BudgetExceeded):
-                    out_of_budget = True
-                    break
+                out_of_budget = out_of_budget or isinstance(exc, BudgetExceeded)
                 continue
             s = candidates.score(b, d, ctx.lint_context, ctx.pricing, ctx.clock())
             bodies.append(b)
@@ -138,13 +150,17 @@ def build_graph(ctx: Context):
         return {"capacity": cap}
 
     def record_node(state):
+        """The record and the cheaper variant only need the chosen design, so they are written at the same time."""
         out = {"record": None, "variant": None}
-        try:
-            out["record"] = record.write(gw, state["body"], state["capacity"], state["alternatives"], state.get("assumptions") or [])
-            out["variant"] = record.variant(gw, state["body"], state["grounding"], state["brief"])
-        except STEP_ERRORS as exc:          # a missing record or variant is a check problem the fix loop can address
-            if isinstance(exc, BudgetExceeded):
-                out["note"] = _reason(exc)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            rec = pool.submit(record.write, gw, state["body"], state["capacity"], state["alternatives"], state.get("assumptions") or [])
+            lean = pool.submit(record.variant, gw, state["body"], state["grounding"], state["brief"])
+        for key, future in (("record", rec), ("variant", lean)):
+            try:
+                out[key] = future.result()
+            except STEP_ERRORS as exc:        # a missing record or variant is a check problem the fix loop can address
+                if isinstance(exc, BudgetExceeded):
+                    out["note"] = _reason(exc)
         return out
 
     def check_node(state):

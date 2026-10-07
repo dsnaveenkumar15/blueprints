@@ -110,3 +110,11 @@ def test_a_design_older_than_seven_days_is_gone_when_its_page_is_opened(client):
     runs.STORE.finish(client.conn, rid, "passed", finished(), None, time.time() - 8 * 86400)
     assert client.get(f"/architect/r/{rid}").status_code == 404
     assert runs.STORE.get_run(client.conn, rid) is None
+
+
+def test_the_consent_text_matches_whether_a_free_model_is_configured(client, monkeypatch):
+    html = client.get("/architect").text
+    assert "free model" not in html.lower() and 'id="arch-consent"' in html          # no free model configured in the fixture
+    assert "set not to keep or train" in html and "owner can read" in html.lower() or "site owner can read" in html.lower()
+    client.app.state.architect_config.public_models = ["free/x:free"]
+    assert "free model whose provider may keep and learn" in client.get("/architect").text

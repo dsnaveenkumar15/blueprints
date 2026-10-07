@@ -15,12 +15,12 @@
   <textarea id="arch-text" name="description" maxlength="2000" rows="7" required placeholder="Who uses it, what it does, what it may change, and anything it must never do."></textarea>
   <p class="arch-count muted"><span id="arch-count">0</span> / 2000</p>
   <p class="arch-examples">Try: {% for e in examples %}<button type="button" class="chip arch-example" data-text="{{ e.text }}">{{ e.label }}</button>{% endfor %}</p>
-  <label class="arch-consent"><input type="checkbox" id="arch-consent" required> <span>This description is not confidential. This demo uses a free model whose provider may keep and learn from what you send.</span></label>
+  <label class="arch-consent"><input type="checkbox" id="arch-consent" required> <span>{% if free_model %}This description is not confidential. This demo uses a free model whose provider may keep and learn from what you send.{% else %}Please do not include confidential details. Your description goes to AI model providers that are set not to keep or train on it, and the site owner can read it for seven days.{% endif %}</span></label>
   <p><button type="submit"{% if not available %} disabled{% endif %}>Design it</button></p>
   <p id="arch-error" class="notice" role="alert" hidden></p>
 </form>
 <h2 class="section-title">How it works</h2>
 <ol class="flow">{% for title, text in how %}<li><h3>{{ title }}</h3><p>{{ text }}</p></li>{% endfor %}</ol>
-<p class="muted">A design takes about 10 to 25 minutes: you can leave and come back to its link · 3 designs a day · everything you send is deleted after 7 days · the site owner can read runs.</p>
+<p class="muted">A design takes about 8 to 12 minutes: you can leave and come back to its link · 3 designs a day · everything you send is deleted after 7 days · the site owner can read runs.</p>
 <script src="/static/blueprints-architect.js"></script>
 {% endblock %}

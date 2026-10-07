@@ -70,5 +70,29 @@ def test_old_runs_are_deleted_by_the_expiry_job(tmp_path):
 
 
 def test_the_run_time_budget_is_realistic_and_configurable():
-    assert runs.load_config({}).run_seconds >= 1500
+    assert runs.load_config({}).run_seconds >= 900
     assert runs.load_config({"ARCHITECT_RUN_SECONDS": "2400"}).run_seconds == 2400
+
+
+def test_defaults_match_a_paid_only_setup_aiming_for_a_few_minutes():
+    cfg = runs.load_config({})
+    assert cfg.run_usd == 0.20 and cfg.run_seconds == 900 and cfg.daily_usd == 0.25 and cfg.public_models == []
+
+
+def test_usage_reports_from_two_threads_do_not_collide(conn):
+    import threading
+    rid = runs.STORE.create_run(conn, {}, "new", "ip", time.time())
+    gw = runs.make_gateway(CFG, conn, rid, lambda *a: None, scripted_factory({}), False)
+    errors = []
+
+    def spend():
+        try:
+            for _ in range(200):
+                gw.on_usage("paid", "p", 0.0001, 10)
+        except Exception as exc:                          # a shared connection used from two threads at once
+            errors.append(exc)
+
+    threads = [threading.Thread(target=spend) for _ in range(2)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert errors == [] and abs(runs.STORE.get_run(conn, rid)["cost_usd"] - 0.04) < 1e-6

@@ -94,7 +94,8 @@ def architect_page(request: Request, conn=Depends(_db)):
     from web.app import render as page
     cfg = request.app.state.architect_config
     available = cfg.enabled and STORE.is_enabled(conn) and STORE.day_spend(conn, time.time()) < cfg.daily_usd
-    return page(request, "blueprints_architect.html", available=available, examples=EXAMPLES, how=HOW)
+    return page(request, "blueprints_architect.html", available=available, examples=EXAMPLES, how=HOW,
+                free_model=bool(cfg.public_models))
 
 
 @router.post("/api/architect/runs")

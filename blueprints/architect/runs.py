@@ -3,6 +3,7 @@
 the two phases (clarify, then design) and a gateway per run with its budgets. Free models are used only after the
 visitor's consent and below the day's free-call cap; the paid spend of both phases counts toward one run budget."""
 import os
+import threading
 import time
 
 from blueprints.architect import candidates, clarify
@@ -21,7 +22,7 @@ MESSAGES = {"off": "The architect is switched off right now. Try again later.",
             "busy": "The architect is busy. Try again in a few minutes."}
 STORE = RunStore("architect", KEEP_DAYS, holding=("queued", "running", "waiting"), interrupted="interrupted", id_bytes=16,
                  messages=MESSAGES)
-DEFAULTS = dict(daily_usd=0.25, run_usd=0.08, run_tokens=1_500_000, run_tool_calls=1, run_seconds=1500, per_ip_day=3,
+DEFAULTS = dict(daily_usd=0.25, run_usd=0.20, run_tokens=1_500_000, run_tool_calls=1, run_seconds=900, per_ip_day=3,
                 concurrent=2, queue=3, free_calls_day=900)
 
 
@@ -39,16 +40,20 @@ def roles(cfg: AgentConfig, free_ok: bool) -> dict[str, list[str]]:
 def make_gateway(cfg: AgentConfig, conn, run_id: str, emit, factory, consent: bool, spent=(0.0, 0)) -> Gateway:
     free_ok = consent and (not cfg.free_calls_day or STORE.calls_today(conn, time.time(), cfg.public_models) < cfg.free_calls_day)
     totals = {"usd": float(spent[0]), "tokens": int(spent[1])}
+    lock = threading.Lock()                       # steps run side by side and share one database connection
 
     def on_usage(model, provider, usd, tokens):
-        totals["usd"] += usd
-        totals["tokens"] += tokens
-        STORE.add_usage(conn, run_id, usd, tokens)
-        emit("usage", {"model": model, "usd": round(usd, 6), "tokens": tokens, "free": model in cfg.public_models,
-                       "total_usd": round(totals["usd"], 6), "total_tokens": totals["tokens"]})
+        with lock:
+            totals["usd"] += usd
+            totals["tokens"] += tokens
+            STORE.add_usage(conn, run_id, usd, tokens)
+            emit("usage", {"model": model, "usd": round(usd, 6), "tokens": tokens, "free": model in cfg.public_models,
+                           "total_usd": round(totals["usd"], 6), "total_tokens": totals["tokens"]})
 
     def day_guard():
-        if STORE.day_spend(conn, time.time()) >= cfg.daily_usd:
+        with lock:
+            spent_today = STORE.day_spend(conn, time.time())
+        if spent_today >= cfg.daily_usd:
             raise BudgetExceeded("daily budget reached")
 
     budget = Budget(cfg.run_usd, cfg.run_tokens, cfg.run_tool_calls, time.monotonic() + cfg.run_seconds)

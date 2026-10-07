@@ -2,7 +2,7 @@
 """Architect launch gate (spec §1): 8 fixed cases across risk levels, run end to end against the real models with the
 ARCHITECT_* settings from the environment. Records pass rate, paid cost and time per case. Spends real money: run by
 hand (`python -m evals.architect_eval`), never from the test suite. Two cases run at a time, like production.
-Gate: >= 7/8 pass, mean paid cost <= $0.06, mean time <= 1500 s (the free model is slow; quality beats speed)."""
+Gate: >= 7/8 pass, mean paid cost <= $0.15, mean time <= 600 s (DeepSeek and GLM only, no free model)."""
 import statistics
 import sys
 import tempfile
@@ -65,7 +65,7 @@ def main() -> int:
     passed = sum(1 for r in rows if r[0] == "passed")
     cost, secs = statistics.mean(r[1] for r in rows), statistics.mean(r[2] for r in rows)
     print(f"passed {passed}/{len(rows)} · mean paid ${cost:.4f} · mean {secs:.0f}s", flush=True)
-    ok = passed >= 7 and cost <= 0.06 and secs <= 1500
+    ok = passed >= 7 and cost <= 0.15 and secs <= 600
     print("GATE " + ("PASS" if ok else "FAIL"), flush=True)
     return 0 if ok else 1
 
