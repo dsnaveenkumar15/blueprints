@@ -66,8 +66,8 @@ def test_the_variant_must_lint_clean_and_cost_less():
     broken = cheaper(bp)
     broken["components"] = broken["components"][:1]
     assert "variant-lint" in check(bp, a_record(), variant=broken)
-    assert "variant-missing" in {p["rule"] for p in consistency.check(bp, a_record(), capacity(bp, load_pricing(), NOW), None,
-                                                                         CONTEXT, load_pricing(), NOW)}
+    no_variant = {p["rule"] for p in consistency.check(bp, a_record(), capacity(bp, load_pricing(), NOW), None, CONTEXT, load_pricing(), NOW)}
+    assert not {"variant-missing", "variant-lint", "variant-cost"} & no_variant      # a variant is only checked when asked for
 
 
 def test_code_measured_alternatives_come_first_and_keep_their_numbers():

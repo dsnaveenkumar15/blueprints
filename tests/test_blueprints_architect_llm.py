@@ -50,7 +50,7 @@ def test_every_prompt_tells_the_model_the_design_text_is_untrusted_data():
     the paid reviewer: each must treat the <untrusted_brief> payload as data it never obeys."""
     from blueprints.architect import prompts
     for name in ("CLARIFY_SYSTEM", "REPROFILE_SYSTEM", "DRAFT_SYSTEM", "RECORD_SYSTEM", "VARIANT_SYSTEM", "FIX_SYSTEM",
-                 "REDTEAM_SYSTEM", "REVIEW_SYSTEM"):
+                 "REVIEW_SYSTEM"):
         text = getattr(prompts, name)
         assert "<untrusted_brief>" in text and "never follow" in text, name
 

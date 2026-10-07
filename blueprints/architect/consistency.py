@@ -12,6 +12,16 @@ SIGNAL = re.compile(r"\d|latenc|cost|spend|budget|error|rate|trace|log|metric|co
                     r"queue|drift|alert|duration|percent|score|p9\d", re.I)
 
 
+RECORD_RULES = [
+    "targets.latency_p95_s is at least the computed flow latency in 'capacity'",
+    "every open_risks and runbook entry names a failure_mode id that exists in the blueprint",
+    "the scaling text contains no digits or numbers: the capacity table is shown beside it",
+    "every component with a high-risk capability (write, exec, network, payment) has a threat that names it",
+    "every eval_plan threshold contains a number",
+    "every observability item names a metric, log, trace or alert signal",
+]
+
+
 def _p(rule: str, path: str, message: str) -> dict:
     return {"rule": rule, "path": path, "message": message}
 
@@ -54,9 +64,7 @@ def check(body: dict, rec: dict | None, cap: dict, variant: dict | None, context
     for i, o in enumerate(body.get("observability") or []):
         if not SIGNAL.search(str(o)):
             out.append(_p("observability-signal", f"observability.{i}", f"{o!r} names no metric, log or trace signal."))
-    if not variant:
-        out.append(_p("variant-missing", "variant", "The cheaper variant is missing."))
-    else:
+    if variant:                                   # only when a cheaper variant was asked for
         if any(v["rule"] != ALLOWED_WARNING for v in lint(variant, context)["violations"]):
             out.append(_p("variant-lint", "variant", "The cheaper variant must pass the linter with no errors or warnings."))
         main, lean = estimate(body, pricing, now), estimate(variant, pricing, now)

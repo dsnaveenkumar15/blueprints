@@ -114,7 +114,7 @@
     }
     else if (e.type === "check") { line("  check: " + p.problems + " problem(s)"); }
     else if (e.type === "redteam") { line("  red team: " + p.findings + " finding(s), " + p.significant + " to fix"); }
-    else if (e.type === "review") { line("  review round " + p.round + ": " + (p.passed ? "passed" : "not yet")); }
+    else if (e.type === "review") { line("  review round " + p.round + ": " + (p.passed ? "passed" : "not yet") + " (" + p.attacks + " attack(s) found)"); }
     else if (e.type === "result") { line("  " + p.reason); }
   };
   source.addEventListener("end", function () { source.close(); location.reload(); });

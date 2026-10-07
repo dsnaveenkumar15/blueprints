@@ -27,19 +27,37 @@ CASES = [
 ]
 
 
+def _step(work, conn, rid, emit):
+    return work(conn, rid, emit)
+
+
 def run_case(db_path: str, work, text: str) -> tuple:
     conn = connect(db_path)                              # one connection per thread
     t = time.monotonic()
     rid = runs.STORE.create_run(conn, {"phase": "clarify", "description": text, "consent": True}, "eval", "eval", time.time())
     emit = lambda type, payload: runs.STORE.add_event(conn, rid, type, payload, time.time())  # noqa: E731
-    status, result = work(conn, rid, emit)
+    try:
+        status, result = _step(work, conn, rid, emit)
+    except Exception as exc:                             # a budget stop or provider failure is a result, not a crash
+        run = runs.STORE.get_run(conn, rid)
+        row = ("failed", run["cost_usd"], time.monotonic() - t, runs.error_text(exc), text)
+        print(f"{row[0]:10} ${row[1]:.4f} {row[2]:6.0f}s  {row[3][:70]} | {text[:50]}", flush=True)
+        conn.close()
+        return row
     if status == "waiting":                              # take the suggested answers, like a visitor who skips
         profile, assumptions = clarify.apply_answers(result["profile"], result["known"], result["questions"], {})
         inp = {"phase": "design", "consent": True, "title": result["title"], "use_case": result["use_case"],
                "profile": profile, "assumptions": assumptions}
         runs.STORE.finish(conn, rid, "waiting", result, None, time.time())
         runs.STORE.requeue(conn, rid, inp)
-        status, result = work(conn, rid, emit)
+        try:
+            status, result = _step(work, conn, rid, emit)
+        except Exception as exc:
+            run = runs.STORE.get_run(conn, rid)
+            row = ("failed", run["cost_usd"], time.monotonic() - t, runs.error_text(exc), text)
+            print(f"{row[0]:10} ${row[1]:.4f} {row[2]:6.0f}s  {row[3][:70]} | {text[:50]}", flush=True)
+            conn.close()
+            return row
     run = runs.STORE.get_run(conn, rid)
     row = (status, run["cost_usd"], time.monotonic() - t, result.get("reason", ""), text)
     print(f"{status:10} ${row[1]:.4f} {row[2]:6.0f}s  {row[3][:70]} | {text[:50]}", flush=True)
@@ -49,6 +67,7 @@ def run_case(db_path: str, work, text: str) -> tuple:
 
 def main() -> int:
     cfg = runs.load_config()
+    cfg.daily_usd = 100.0                                # the eval's own database counts every case: the daily cap is not under test
     if not cfg.enabled:
         print("ARCHITECT_ENABLED=1, OPENROUTER_API_KEY and ARCHITECT_FAST_MODELS are required")
         return 2

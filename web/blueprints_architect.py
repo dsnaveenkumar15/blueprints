@@ -25,12 +25,12 @@ RUN_ID = re.compile(r"[0-9a-f]{32}")
 STREAM_SECONDS = 180
 FINISHED = ("passed", "not_ready")
 PRIVATE = {"X-Robots-Tag": "noindex", "Referrer-Policy": "no-referrer"}
-STEPS = [("clarify", "Clarify"), ("decide", "Decide"), ("ground", "Ground"), ("candidates", "Two candidates"),
+STEPS = [("clarify", "Clarify"), ("decide", "Decide"), ("ground", "Ground"), ("candidates", "Draft the design"),
          ("capacity", "Capacity"), ("record", "Decision record"), ("check", "Check"), ("fix", "Fix"),
-         ("redteam", "Red team"), ("review", "Architect review"), ("finish", "Finish")]
+         ("review", "Red team and review"), ("finish", "Finish")]
 HOW = [("Describe it", "A few sentences about what the system should do. The agent asks only the questions that change the design."),
-       ("It designs and checks", "Two candidate designs, a capacity model, a decision record and runbook; the linter and consistency checks must come back clean."),
-       ("Red team and review", "An adversarial pass, then an independent architect review that must score every area production-ready.")]
+       ("It designs and checks", "A design drafted from the published library, a capacity model, a decision record and runbook; the linter and consistency checks must come back clean."),
+       ("Red team and review", "An independent architect review that also attacks the design, and must score every area production-ready.")]
 EXAMPLES = [{"label": "Support agent with refunds",
              "text": "A support agent for an online shop that answers order questions from our help articles and can issue refunds up to $200."},
             {"label": "Contract review", "text": "Reviews supplier contracts for a legal team, flags risky clauses and suggests edits. Lawyers make every final decision."},

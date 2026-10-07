@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from blueprints.architect import prompts
 from blueprints.architect.candidates import pin
+from blueprints.architect.consistency import RECORD_RULES
 from blueprints.architect.llm import structured
 
 Line = Annotated[str, StringConstraints(min_length=1, max_length=600)]
@@ -57,7 +58,8 @@ class Variant(BaseModel):
 
 
 def write(gateway, body: dict, cap: dict, alternatives: list[dict], assumptions: list[str]) -> dict:
-    payload = {"blueprint": body, "capacity": cap, "alternatives": alternatives, "assumptions": assumptions}
+    payload = {"blueprint": body, "capacity": cap, "alternatives": alternatives, "assumptions": assumptions,
+               "record_rules": RECORD_RULES}
     rec = structured(gateway, "bulk", prompts.RECORD_SYSTEM, payload, Record).model_dump()
     extra = [a for a in rec["alternatives"] if a["topology"] not in {c["topology"] for c in alternatives}][:1]
     rec["alternatives"] = [Alternative.model_validate(a).model_dump() for a in alternatives] + extra

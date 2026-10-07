@@ -91,7 +91,7 @@ class RoutedModel:
     """A fake model that answers by what it is asked, not by call order, so steps may run at the same time.
     `routes` maps a marker found in the system prompt to the list of replies for that kind of step."""
     MARKERS = {"clarify": "Read the visitor's description", "draft": "reference architectures", "record": "decision record",
-               "variant": "cheaper variant", "fix": "You fix a design", "redteam": "red team", "review": "principal engineer reviewing"}
+               "variant": "cheaper variant", "fix": "You fix a design", "review": "principal engineer reviewing"}
 
     def __init__(self, routes: dict):
         import threading
