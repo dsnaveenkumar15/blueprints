@@ -54,3 +54,19 @@ def test_filter_bar_may_wrap_rather_than_push_the_page_sideways():
     from pathlib import Path
     css = (Path(__file__).resolve().parent.parent / "web" / "static" / "themes" / "blueprints" / "theme.css").read_text(encoding="utf-8")
     assert "nowrap" not in "".join(m for m in __import__("re").findall(r"\.filter-bar\s*\{([^}]*)\}", css))
+
+
+def test_the_flow_canvas_scrolls_sideways_instead_of_wrapping_so_no_connector_dangles():
+    import re
+    from pathlib import Path
+    css = (Path(__file__).resolve().parent.parent / "web" / "static" / "themes" / "blueprints" / "theme.css").read_text(encoding="utf-8")
+    rule = re.search(r"\.flow-canvas\s*\{([^}]*)\}", css).group(1)
+    assert "flex-wrap: nowrap" in rule and "overflow-x: auto" in rule
+    assert re.search(r"\.flow-canvas \.node\s*\{[^}]*flex:\s*none", css)
+
+
+def test_the_architect_questions_are_compact():
+    import re
+    from pathlib import Path
+    css = (Path(__file__).resolve().parent.parent / "web" / "static" / "themes" / "blueprints" / "theme.css").read_text(encoding="utf-8")
+    assert re.search(r"\.arch-questions fieldset p\s*\{[^}]*margin:\s*0", css)

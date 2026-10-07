@@ -2,7 +2,6 @@
 """The architect pages and API (spec §4.3, §7). Runs execute on background threads (core.agent.runs.Runner); the
 browser follows a run over a same-origin event stream; a waiting run shows its questions; run pages are private
 (noindex, no referrer) and everything is deleted after 7 days."""
-import hashlib
 import re
 import time
 
@@ -68,8 +67,8 @@ def _db(request: Request):
         conn.close()
 
 
-def _ip_hash(request: Request) -> str:
-    return hashlib.sha256(client_ip(request, request.app.state.settings.trust_proxy).encode()).hexdigest()[:32]
+def _ip_hash(request: Request, conn) -> str:
+    return STORE.visitor_hash(conn, client_ip(request, request.app.state.settings.trust_proxy))
 
 
 def _guard(request: Request) -> None:
@@ -111,7 +110,7 @@ def start_run(request: Request, body: StartRun, conn=Depends(_db)):
     try:
         rid = STORE.create_checked(conn, request.app.state.architect_config,
                                    {"phase": "clarify", "description": text, "consent": True, "consent_at": now},
-                                   "new", _ip_hash(request), now)
+                                   "new", _ip_hash(request, conn), now)
     except LimitError as exc:
         raise HTTPException(exc.status, str(exc))
     request.app.state.architect_runner.start(rid)
@@ -150,7 +149,7 @@ def refine(run_id: str, request: Request, body: Refine, conn=Depends(_db)):
            "use_case": r["brief"]["use_case"], "profile": r["brief"]["profile"], "assumptions": r.get("assumptions") or [],
            "previous": r["blueprint"], "instruction": body.instruction.strip(), "parent": run_id}
     try:
-        rid = STORE.create_checked(conn, request.app.state.architect_config, inp, "refine", _ip_hash(request), now)
+        rid = STORE.create_checked(conn, request.app.state.architect_config, inp, "refine", _ip_hash(request, conn), now)
     except LimitError as exc:
         raise HTTPException(exc.status, str(exc))
     request.app.state.architect_runner.start(rid)
