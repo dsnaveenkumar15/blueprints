@@ -32,9 +32,9 @@ def parse(text: str, schema: type[BaseModel]) -> BaseModel:
 
 
 def _why(exc: Exception) -> str:
+    """Every problem (up to six) so one repair can fix them all; paths and rules only, never the model's own text."""
     if isinstance(exc, ValidationError):
-        e = exc.errors()[0]
-        return f"{'.'.join(str(p) for p in e['loc']) or 'root'}: {e['msg']}"[:300]
+        return "; ".join(f"{'.'.join(str(p) for p in e['loc']) or 'root'}: {e['msg']}" for e in exc.errors()[:6])[:900]
     return "the reply was not one JSON object"
 
 

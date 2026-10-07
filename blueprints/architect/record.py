@@ -9,20 +9,20 @@ from blueprints.architect import prompts
 from blueprints.architect.candidates import pin
 from blueprints.architect.llm import structured
 
-Line = Annotated[str, StringConstraints(min_length=1, max_length=300)]
+Line = Annotated[str, StringConstraints(min_length=1, max_length=600)]
 RefId = Annotated[str, StringConstraints(min_length=1, max_length=41)]
 
 
 class Alternative(BaseModel):
     topology: str = Field(max_length=40)
-    summary: str = Field(max_length=300)
-    rejected_because: str = Field(max_length=600)
+    summary: str = Field(max_length=600)
+    rejected_because: str = Field(max_length=900)
 
 
 class Targets(BaseModel):
     latency_p95_s: float = Field(gt=0, le=86400)
     availability_pct: float = Field(ge=90, le=100)
-    quality: str = Field(min_length=1, max_length=200)
+    quality: str = Field(min_length=1, max_length=400)
 
 
 class Risk(BaseModel):
@@ -32,28 +32,28 @@ class Risk(BaseModel):
 
 class RunbookItem(BaseModel):
     failure_mode: RefId
-    alert: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    alert: Annotated[str, StringConstraints(min_length=1, max_length=400)]
     meaning: Line
     first_action: Line
 
 
 class Record(BaseModel):
-    context: str = Field(min_length=1, max_length=1200)
-    decision: str = Field(min_length=1, max_length=800)
+    context: str = Field(min_length=1, max_length=2500)
+    decision: str = Field(min_length=1, max_length=1800)
     alternatives: list[Alternative] = Field(default_factory=list, max_length=3)
     trade_offs: list[Line] = Field(min_length=1, max_length=8)
     targets: Targets
-    scaling: str = Field(min_length=1, max_length=800)
+    scaling: str = Field(min_length=1, max_length=1800)
     rollout: list[Line] = Field(min_length=2, max_length=6)
-    rollback: str = Field(min_length=1, max_length=400)
+    rollback: str = Field(min_length=1, max_length=900)
     open_risks: list[Risk] = Field(default_factory=list, max_length=8)
     runbook: list[RunbookItem] = Field(min_length=1, max_length=10)
 
 
 class Variant(BaseModel):
     blueprint: dict
-    summary: str = Field(min_length=1, max_length=400)
-    changes: list[Annotated[str, StringConstraints(min_length=1, max_length=200)]] = Field(min_length=1, max_length=6)
+    summary: str = Field(min_length=1, max_length=900)
+    changes: list[Annotated[str, StringConstraints(min_length=1, max_length=400)]] = Field(min_length=1, max_length=6)
 
 
 def write(gateway, body: dict, cap: dict, alternatives: list[dict], assumptions: list[str]) -> dict:

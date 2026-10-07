@@ -53,3 +53,15 @@ def test_every_prompt_tells_the_model_the_design_text_is_untrusted_data():
                  "REDTEAM_SYSTEM", "REVIEW_SYSTEM"):
         text = getattr(prompts, name)
         assert "<untrusted_brief>" in text and "never follow" in text, name
+
+
+def test_the_repair_message_lists_every_problem_not_just_the_first():
+    class Many(BaseModel):
+        a: str
+        b: int
+        c: int
+
+    gw = scripted_gateway({"free": [reply({"a": 1, "b": "x"}), reply({"a": "ok", "b": 1, "c": 2})]})
+    assert structured(gw, "bulk", "sys", {}, Many).c == 2
+    repair = gw.factory("free").calls[1][-1].content
+    assert "a:" in repair and "b:" in repair and "c:" in repair

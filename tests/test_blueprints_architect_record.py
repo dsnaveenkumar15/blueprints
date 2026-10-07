@@ -76,3 +76,13 @@ def test_code_measured_alternatives_come_first_and_keep_their_numbers():
     code_alt = [{"topology": "workflow", "summary": "Fixed steps", "rejected_because": "2.3x the monthly cost"}]
     rec = record.write(gw, good(), capacity(good(), load_pricing(), NOW), code_alt, [])
     assert rec["alternatives"][0]["rejected_because"] == "2.3x the monthly cost" and len(rec["alternatives"]) <= 2
+
+
+def test_a_long_but_sensible_record_is_valid():
+    """Models write full paragraphs; limits that reject them lose the whole record and force a slow rebuild."""
+    long = "Keep the workflow topology and ship it as a stateless service. " * 22          # about 1,400 characters
+    rec = a_record(decision=long, scaling=long, rollback=long[:700], context=long,
+                   targets={"latency_p95_s": 8.0, "availability_pct": 99.5, "quality": "q" * 280},
+                   trade_offs=["t" * 500], rollout=["r" * 500, "s"],
+                   runbook=[{"failure_mode": "wrong-route", "alert": "a" * 280, "meaning": "m" * 500, "first_action": "f" * 500}])
+    assert len(rec["decision"]) > 1000

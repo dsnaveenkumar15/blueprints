@@ -67,3 +67,8 @@ def test_old_runs_are_deleted_by_the_expiry_job(tmp_path):
     _, stage = types[ARCHITECT_EXPIRE_JOB].stages[0]
     stage(None, {})
     assert runs.STORE.get_run(c, old) is None
+
+
+def test_the_run_time_budget_is_realistic_and_configurable():
+    assert runs.load_config({}).run_seconds >= 1500
+    assert runs.load_config({"ARCHITECT_RUN_SECONDS": "2400"}).run_seconds == 2400
