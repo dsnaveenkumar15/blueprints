@@ -112,7 +112,7 @@
     else if (e.type === "candidate") {
       line("  candidate " + p.topology + ": " + p.status + (p.monthly_usd ? " · $" + Math.round(p.monthly_usd) + "/month" : ""));
     }
-    else if (e.type === "check") { line("  check: " + p.problems + " problem(s)"); }
+    else if (e.type === "check") { line("  check: " + p.problems + " problem(s)"); (p.first || []).forEach(function (f) { line("    - " + f); }); }
     else if (e.type === "redteam") { line("  red team: " + p.findings + " finding(s), " + p.significant + " to fix"); }
     else if (e.type === "review") { line("  review round " + p.round + ": " + (p.passed ? "passed" : "not yet") + " (" + p.attacks + " attack(s) found)"); }
     else if (e.type === "result") { line("  " + p.reason); }

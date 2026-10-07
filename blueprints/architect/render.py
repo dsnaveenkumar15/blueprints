@@ -5,7 +5,7 @@ AREA_LABELS = {"requirement_fit": "Requirement fit", "topology": "Topology choic
                "security": "Security", "cost_and_scale": "Cost and scale", "evaluation": "Evaluation",
                "observability": "Observability", "rollout": "Rollout"}
 EXPORT_KEYS = ("verdict", "reason", "brief", "assumptions", "blueprint", "record", "variant", "capacity", "cost", "review",
-               "redteam", "alternatives")
+               "redteam", "alternatives", "residual")
 
 
 def _cell(v) -> str:
@@ -82,6 +82,12 @@ def markdown(result: dict) -> str:
     if review:
         out += ["", "## Review", ""] + _table(["area", "score"], [[AREA_LABELS.get(a, a), f"{s} / 5"] for a, s in review["scores"].items()])
         out += ["", review.get("summary") or ""]
+        if result.get("residual"):
+            out += ["", "**Residual risks** (high-severity attacks the design as written does not fully control):",
+                    *[f"- {a['component']}: {a['scenario']} Control to add: {a['control']}" for a in result["residual"]]]
+        if review.get("attacks"):
+            out += ["", "### Red team", "", *[f"- {a['severity']} · {a['component']}: {a['scenario']} Control: {a['control']}"
+                                              + ("" if a.get("controlled") else " (not yet controlled)") for a in review["attacks"]]]
     variant = result.get("variant")
     if variant:
         out += ["", "## If the budget is tighter", "", variant["summary"], *[f"- {c}" for c in variant["changes"]], "",

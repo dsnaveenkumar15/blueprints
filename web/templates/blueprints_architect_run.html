@@ -87,6 +87,8 @@
     <p>{{ res.review.summary }}</p>
     {% if res.review.findings %}<ul>{% for f in res.review.findings %}<li>{% if f.blocking %}<b>Blocking</b> · {% endif %}{{ f.area }}: {{ f.problem }} <span class="muted">Fix: {{ f.fix }}</span></li>{% endfor %}</ul>{% endif %}
     {% else %}<p class="muted">This design was not reviewed: it stopped before the review.</p>{% endif %}
+    {% if res.residual %}<div class="notice"><b>Residual risks.</b> The review passed, but it found {{ res.residual | length }} high-severity attack{{ "s" if res.residual | length != 1 }} that the design as written does not fully control. Close {{ "them" if res.residual | length != 1 else "it" }} before shipping:
+      <ul>{% for a in res.residual %}<li><span class="mono">{{ a.severity }}</span> · {{ a.component }}: {{ a.scenario }} <span class="muted">Control to add: {{ a.control }}</span></li>{% endfor %}</ul></div>{% endif %}
     {% if res.redteam %}<h3>Red team</h3><ul>{% for f in res.redteam %}<li><span class="mono">{{ f.severity }}</span> · {{ f.component }}: {{ f.scenario }} <span class="muted">Control: {{ f.control }}</span></li>{% endfor %}</ul>{% endif %}
   </section>
   <section id="trace">

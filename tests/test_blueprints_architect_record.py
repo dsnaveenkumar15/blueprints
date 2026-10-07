@@ -34,6 +34,7 @@ def cheaper(body):
 
 
 def check(body, rec, variant=None):
+    body = {**body, "profile": {**body["profile"], "latency": "near_real_time"}}      # the sample flow takes 6.6 s: fine at 30 s
     cap = capacity(body, load_pricing(), NOW)
     return {p["rule"] for p in consistency.check(body, rec, cap, variant or cheaper(body), CONTEXT, load_pricing(), NOW)}
 
@@ -86,3 +87,14 @@ def test_a_long_but_sensible_record_is_valid():
                    trade_offs=["t" * 500], rollout=["r" * 500, "s"],
                    runbook=[{"failure_mode": "wrong-route", "alert": "a" * 280, "meaning": "m" * 500, "first_action": "f" * 500}])
     assert len(rec["decision"]) > 1000
+
+
+def test_a_flow_slower_than_the_profiles_latency_target_is_a_problem_naming_the_slowest_step():
+    slow = good()                                        # interactive profile: 5 s target, this flow takes about 6.6 s
+    problems = [p for p in consistency.check(slow, a_record(), capacity(slow, load_pricing(), NOW), cheaper(slow), CONTEXT,
+                                             load_pricing(), NOW) if p["rule"] == "latency-over-target"]
+    assert len(problems) == 1 and "answer" in problems[0]["message"] and "faster" in problems[0]["message"]
+    relaxed = good()
+    relaxed["profile"] = {**relaxed["profile"], "latency": "near_real_time"}
+    assert "latency-over-target" not in {p["rule"] for p in consistency.check(
+        relaxed, a_record(), capacity(relaxed, load_pricing(), NOW), cheaper(relaxed), CONTEXT, load_pricing(), NOW)}

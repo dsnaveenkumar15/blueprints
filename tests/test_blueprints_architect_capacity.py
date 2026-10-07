@@ -46,3 +46,11 @@ def test_grounding_brings_the_nearest_published_designs_and_the_allowed_parts():
     assert out["references"][0]["blueprint"]["id"] == "refund-support"
     assert [p["id"] for p in out["patterns"]] == ["routing"]
     assert "claude-haiku-4-5" in out["limits"]["allowed_models"] and "acme/orders-mcp" in out["limits"]["allowed_tools"]
+
+
+def test_grounding_tells_the_drafter_the_latency_target_and_how_fast_each_allowed_model_is():
+    bp = good()
+    out = ground(bp["profile"], decide(bp["profile"]), [], lambda i: None, [], CONTEXT, load_pricing())
+    assert out["limits"]["latency_target_s"] == 5.0
+    speeds = out["limits"]["model_speeds"]
+    assert set(speeds) == set(out["limits"]["allowed_models"]) and {"ttft_s", "tokens_per_s"} <= set(speeds["claude-haiku-4-5"])

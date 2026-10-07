@@ -65,3 +65,26 @@ def test_the_repair_message_lists_every_problem_not_just_the_first():
     assert structured(gw, "bulk", "sys", {}, Many).c == 2
     repair = gw.factory("free").calls[1][-1].content
     assert "a:" in repair and "b:" in repair and "c:" in repair
+
+
+def test_long_text_in_a_reply_is_shortened_not_rejected():
+    """Rejecting a sound design because a sentence ran long loses the whole step; models ignore length hints."""
+    from blueprints.architect import record, review
+    long = "word " * 400
+    r = review.Review.model_validate({**{a: 4 for a in review.AREAS}, "summary": long,
+                                      "findings": [{"area": "security", "blocking": False, "problem": long, "fix": long}],
+                                      "attacks": [{"component": "kb", "scenario": long, "severity": "low", "control": long}]})
+    assert len(r.summary) <= 600 and len(r.findings[0].problem) <= 400 and r.summary.endswith("…")
+    rec = record.Record.model_validate({"context": long * 3, "decision": long * 3, "alternatives": [], "trade_offs": [long],
+                                        "targets": {"latency_p95_s": 8, "availability_pct": 99, "quality": long},
+                                        "scaling": long * 3, "rollout": [long, long], "rollback": long * 3,
+                                        "open_risks": [], "runbook": [{"failure_mode": "wrong-route", "alert": long, "meaning": long,
+                                                                       "first_action": long}]})
+    assert len(rec.decision) <= 1800 and len(rec.runbook[0].alert) <= 400
+
+
+def test_a_failed_step_names_the_schema_and_the_first_problem_but_never_the_reply():
+    gw = scripted_gateway({"free": [reply({"name": "SECRET-TEXT"}), reply({"name": "SECRET-TEXT"})]})
+    with pytest.raises(StepFailed) as err:
+        structured(gw, "bulk", "sys", {}, Out)
+    assert "Out" in str(err.value) and "n:" in str(err.value) and "SECRET-TEXT" not in str(err.value)

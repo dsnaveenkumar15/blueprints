@@ -20,7 +20,7 @@ from blueprints.diagram import to_mermaid
 from core.agent.gateway import BudgetExceeded
 
 MAX_FIX_ROUNDS = 4
-MAX_REVIEW_ROUNDS = 2
+MAX_REVIEW_ROUNDS = 3
 STEP_ERRORS = (BudgetExceeded, RuntimeError, StepFailed)
 NODES = ("decide", "ground", "candidates", "capacity", "record", "check", "fix", "review", "finish")
 
@@ -39,10 +39,12 @@ class State(TypedDict, total=False):
     record: dict | None
     capacity: dict
     problems: list
+    check_open: int
     fix_rounds: int
     review: dict | None
     review_rounds: int
     best: dict | None
+    best_pass: dict | None
     note: str
     result: dict
 
@@ -63,7 +65,7 @@ def _reason(exc: Exception) -> str:
     if isinstance(exc, BudgetExceeded):
         return str(exc)
     if isinstance(exc, StepFailed):
-        return "the model returned invalid output twice"
+        return str(exc) or "the model returned invalid output twice"
     return "the model service failed"
 
 
@@ -90,7 +92,7 @@ def build_graph(ctx: Context):
     def decide_node(state):
         d = decide(state["brief"]["profile"])
         ctx.emit("info", {"text": f"Topology {d['topology']}; {len(d['mandatory'])} mandatory control(s)"})
-        return {"decision": d, "fix_rounds": 0, "review_rounds": 0, "problems": [], "note": "", "review": None, "best": None,
+        return {"decision": d, "fix_rounds": 0, "review_rounds": 0, "problems": [], "check_open": 0, "note": "", "review": None, "best": None, "best_pass": None,
                 "alternatives": alternatives.from_decision(d)}
 
     def ground_node(state):
@@ -132,15 +134,17 @@ def build_graph(ctx: Context):
         cap = capacity(body, ctx.pricing, ctx.clock())
         checks = (consistency.lint_problems(body, ctx.lint_context, bool(state.get("chosen_alt")))
                   + consistency.check(body, state.get("record"), cap, None, ctx.lint_context, ctx.pricing, ctx.clock()))
-        ctx.emit("check", {"problems": len(checks), "rules": sorted({c["rule"] for c in checks})[:12]})
-        out = {"capacity": cap, "problems": fix.from_checks(checks)}
+        ctx.emit("check", {"problems": len(checks), "rules": sorted({c["rule"] for c in checks})[:12],
+                           "first": [f"{c['path']}: {c['message'][:110]}" for c in checks[:3]]})
+        out = {"capacity": cap, "problems": fix.from_checks(checks), "check_open": len(checks)}
         if not checks:
             out["best"] = {"body": body, "record": state.get("record")}
         return out
 
     def fix_node(state):
         try:
-            body, rec = fix.run(gw, state["body"], state.get("record"), state["problems"], state["brief"], state["body"]["topology"])
+            body, rec = fix.run(gw, state["body"], state.get("record"), state["problems"], state["brief"], state["body"]["topology"],
+                                state["grounding"]["limits"])
         except STEP_ERRORS as exc:
             return {"note": _reason(exc), "fix_rounds": state["fix_rounds"] + 1}
         ctx.emit("info", {"text": f"Fix round {state['fix_rounds'] + 1}: addressed {len(state['problems'])} problem(s)"})
@@ -153,24 +157,34 @@ def build_graph(ctx: Context):
             return {"note": _reason(exc), "review_rounds": state["review_rounds"] + 1}
         ctx.emit("review", {"scores": r["scores"], "passed": r["passed"], "round": state["review_rounds"] + 1,
                             "attacks": len(r["attacks"])})
-        return {"review": r, "review_rounds": state["review_rounds"] + 1,
-                "problems": [] if r["passed"] else review.problems(r), "fix_rounds": 0}
+        out = {"review": r, "review_rounds": state["review_rounds"] + 1,
+               "problems": [] if r["clean"] else review.problems(r), "fix_rounds": 0}
+        kept = state.get("best_pass")
+        if r["passed"] and (kept is None or r["clean"] or not kept["review"]["clean"]):
+            out["best_pass"] = {"body": state["body"], "record": state["record"], "review": r, "round": state["review_rounds"] + 1}
+        return out
 
     def finish_node(state):
         r = state.get("review") or None
-        clean = bool(state.get("body")) and not state.get("problems") and not state.get("note")
-        passed = clean and bool(r and r["passed"])
-        best = state.get("best")
+        # a pass needs clean linter and consistency checks and a passing review; high attacks left open are residual risks
+        passed = bool(state.get("body")) and not state.get("note") and not state.get("check_open") and bool(r and r["passed"])
+        best, kept = state.get("best"), state.get("best_pass")
         chosen = best if (not passed and best) else {"body": state.get("body"), "record": state.get("record")}
+        earlier = False
+        if not passed and kept:                      # a version that already passed review beats a later one that did not
+            chosen, r, passed, earlier = kept, kept["review"], True, True
         body = chosen["body"]
-        if passed:
+        if earlier:
+            reason = (f"Passed the architect review on round {kept['round']}; later changes did not improve it, so that "
+                      "version is shown.")
+        elif passed:
             reason = "Passed the linter, the consistency checks and the architect review (which also attacked the design)."
         elif state.get("note"):
             reason = f"Stopped early: {state['note']}."
         elif r and not r["passed"] and state.get("review_rounds", 0) >= MAX_REVIEW_ROUNDS:
-            reason = "The architect review did not pass after two rounds."
-        elif state.get("problems"):
-            reason = f"{len(state['problems'])} problem(s) remained after the fix rounds."
+            reason = "The architect review did not pass after three rounds."
+        elif state.get("check_open"):
+            reason = f"{state['check_open']} check problem(s) remained after the fix rounds."
         else:
             reason = "The architect review did not pass."
         now = ctx.clock()
@@ -180,7 +194,7 @@ def build_graph(ctx: Context):
                   "capacity": _safe(capacity, body, ctx.pricing, now) if body else None,
                   "cost": _safe(estimate, body, ctx.pricing, now) if body else None,
                   "diagram": _safe(to_mermaid, body, default="") if body else "",
-                  "review": r, "redteam": (r or {}).get("attacks") or [], "alternatives": state.get("alternatives") or [],
+                  "review": r, "redteam": (r or {}).get("attacks") or [], "residual": (r or {}).get("residual") or [], "alternatives": state.get("alternatives") or [],
                   "scores": state.get("scores") or [], "problems": state.get("problems") or [], "decision": state.get("decision")}
         ctx.emit("result", {"verdict": result["verdict"], "reason": reason})
         return {"result": result}
@@ -197,7 +211,7 @@ def build_graph(ctx: Context):
         if state["problems"]:
             return "fix" if state["fix_rounds"] < MAX_FIX_ROUNDS else "finish"
         r = state.get("review")
-        if r is None or (not r["passed"] and state["review_rounds"] < MAX_REVIEW_ROUNDS):
+        if r is None or (not r["clean"] and state["review_rounds"] < MAX_REVIEW_ROUNDS):
             return "review"
         return "finish"
 
@@ -207,7 +221,7 @@ def build_graph(ctx: Context):
     def after_review(state):
         if state.get("note"):
             return "finish"
-        if state["review"]["passed"] or state["review_rounds"] >= MAX_REVIEW_ROUNDS:
+        if state["review"]["clean"] or state["review_rounds"] >= MAX_REVIEW_ROUNDS:
             return "finish"
         return "fix"
 

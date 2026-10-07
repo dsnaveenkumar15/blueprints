@@ -82,7 +82,7 @@ def test_a_finished_page_is_private_escaped_and_downloadable_only_when_passed(cl
     page = client.get(f"/architect/r/{rid}")
     assert page.status_code == 200 and EVIL not in page.text and "&lt;script&gt;" in page.text
     assert page.headers["x-robots-tag"] == "noindex" and page.headers["referrer-policy"] == "no-referrer"
-    assert 'id="arch-refine"' in page.text and "Passed review" in page.text
+    assert 'id="arch-refine"' in page.text and "Passed review" in page.text and "Residual risks" not in page.text
     md = client.get(f"/architect/r/{rid}.md")
     assert md.status_code == 200 and "## Decision record" in md.text and md.headers["x-robots-tag"] == "noindex"
     assert client.get(f"/architect/r/{rid}.json").json()["verdict"] == "passed"
@@ -118,3 +118,13 @@ def test_the_consent_text_matches_whether_a_free_model_is_configured(client, mon
     assert "set not to keep or train" in html and "owner can read" in html.lower() or "site owner can read" in html.lower()
     client.app.state.architect_config.public_models = ["free/x:free"]
     assert "free model whose provider may keep and learn" in client.get("/architect").text
+
+
+def test_a_pass_with_residual_risks_shows_them_on_the_page(client):
+    risk = {"component": "refund-gate", "scenario": "console bypass <b>x</b>", "severity": "high", "control": "network allow-list", "controlled": False}
+    rid = runs.STORE.create_run(client.conn, {"phase": "design", "consent": True}, "new", "r", time.time())
+    res = finished()
+    res["residual"], res["review"]["attacks"] = [risk], [risk]
+    runs.STORE.finish(client.conn, rid, "passed", res, None, time.time())
+    page = client.get(f"/architect/r/{rid}").text
+    assert "Residual risks" in page and "network allow-list" in page and "<b>x</b>" not in page and "&lt;b&gt;x&lt;/b&gt;" in page

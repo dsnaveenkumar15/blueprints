@@ -19,6 +19,7 @@ RECORD_RULES = [
     "every component with a high-risk capability (write, exec, network, payment) has a threat that names it",
     "every eval_plan threshold contains a number",
     "every observability item names a metric, log, trace or alert signal",
+    "the flow's computed end-to-end latency fits the profile's latency target: pick faster models, do not relax the target",
 ]
 
 
@@ -34,6 +35,14 @@ def lint_problems(body: dict, context: dict, allow_topology_differs: bool) -> li
 
 def check(body: dict, rec: dict | None, cap: dict, variant: dict | None, context: dict, pricing: dict, now: float) -> list[dict]:
     out = []
+    if cap.get("complete") and cap["latency_s"] > cap["latency_target_s"]:
+        timed = [s for s in cap["steps"] if s["latency_s"] is not None]
+        slowest = max(timed, key=lambda s: s["latency_s"]) if timed else None
+        out.append(_p("latency-over-target", "flow",
+                      f"The flow takes {cap['latency_s']:g} s end to end against the profile's {cap['latency_target_s']:g} s target"
+                      + (f"; the slowest step is {slowest['id']} ({slowest['latency_s']:g} s)" if slowest else "")
+                      + ". Use a faster allowed model for it (see model_speeds), fewer output tokens or fewer calls: do not "
+                        "relax the target."))
     modes = {f.get("id") for f in body.get("failure_modes") or [] if isinstance(f, dict)}
     if not rec:
         out.append(_p("record-missing", "record", "The decision record is missing."))

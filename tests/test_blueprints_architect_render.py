@@ -35,6 +35,13 @@ def test_markdown_has_every_section_and_escapes_table_pipes():
     assert "Refunds \\| fast" in md and "2.0x the monthly cost" in md
 
 
+def test_residual_risks_are_listed_in_the_download_and_never_hidden_by_a_pass():
+    risk = {"component": "refund-gate", "scenario": "console bypass", "severity": "high", "control": "network allow-list", "controlled": False}
+    res = result(residual=[risk], review={"scores": {"security": 4}, "findings": [], "attacks": [risk], "summary": "ok", "passed": True})
+    md = render.markdown(res)
+    assert "Residual risks" in md and "console bypass" in md and "network allow-list" in md and render.export(res)["residual"] == [risk]
+
+
 def test_exports_never_carry_the_visitors_description():
     assert "SECRET VISITOR TEXT" not in render.markdown(result())
     assert "description" not in render.export(result())

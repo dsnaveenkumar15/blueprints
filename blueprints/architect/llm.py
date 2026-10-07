@@ -5,9 +5,19 @@ import json
 import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, BeforeValidator, ValidationError
 
 FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
+
+
+def clip(n: int):
+    """A text field the model wrote too long is shortened, not rejected: models ignore length hints, and losing a sound
+    design over a long sentence costs the whole step."""
+    return BeforeValidator(lambda v: v[:n - 1].rstrip() + "…" if isinstance(v, str) and len(v) > n else v)
+
+
+def clip_list(n: int):
+    return BeforeValidator(lambda v: v[:n] if isinstance(v, list) and len(v) > n else v)
 
 
 class StepFailed(Exception):
@@ -49,6 +59,6 @@ def structured(gateway, role: str, system: str, payload: dict, schema: type[Base
             return parse(_text(msg.content), schema)
         except (ValueError, ValidationError) as exc:
             if attempt == 2:
-                raise StepFailed(f"{schema.__name__}: the model returned invalid output twice") from None
+                raise StepFailed(f"{schema.__name__}: the model returned invalid output twice ({_why(exc)[:160]})") from None
             messages += [msg, HumanMessage(f"That reply was not valid ({_why(exc)}). Reply again with the corrected JSON object only.")]
     raise StepFailed(schema.__name__)

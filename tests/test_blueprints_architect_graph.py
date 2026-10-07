@@ -12,7 +12,7 @@ from tests.test_blueprints_architect_record import a_record  # noqa: E402
 PASS = {**{a: 4 for a in review.AREAS}, "findings": [], "summary": "ready"}
 FAIL = {**{a: 4 for a in review.AREAS}, "security": 3, "summary": "no",
         "findings": [{"area": "security", "blocking": True, "problem": "p", "fix": "f"}]}
-BRIEF = candidates.brief("Refund support agent", "customer support", good()["profile"])
+BRIEF = candidates.brief("Refund support agent", "customer support", {**good()["profile"], "latency": "near_real_time"})
 
 
 def draft():
@@ -51,11 +51,13 @@ def test_linter_errors_go_through_the_fix_loop():
     result, events, _ = run(clean_routes(draft=[broken()], fix=[reply({"blueprint": good(), "record": a_record()})]))
     assert result["verdict"] == "passed"
     assert any(t == "node" and p == {"name": "fix", "status": "start"} for t, p in events)
+    first = next(p["first"] for t, p in events if t == "check" and p["problems"])       # which rule and where, never the model's text
+    assert first and all(": " in line for line in first)
 
 
-def test_two_failed_reviews_end_not_ready_with_the_reason():
-    result, _, _ = run(clean_routes(review=[reply(FAIL), reply(FAIL)], fix=[reply({"blueprint": good(), "record": a_record()})]))
-    assert result["verdict"] == "not_ready" and "two rounds" in result["reason"]
+def test_three_failed_reviews_end_not_ready_with_the_reason():
+    result, _, _ = run(clean_routes(review=[reply(FAIL)] * 3, fix=[reply({"blueprint": good(), "record": a_record()})] * 3))
+    assert result["verdict"] == "not_ready" and "three rounds" in result["reason"]
     assert result["review"]["scores"]["security"] == 3
 
 

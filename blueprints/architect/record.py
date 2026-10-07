@@ -8,22 +8,22 @@ from pydantic import BaseModel, Field, StringConstraints
 from blueprints.architect import prompts
 from blueprints.architect.candidates import pin
 from blueprints.architect.consistency import RECORD_RULES
-from blueprints.architect.llm import structured
+from blueprints.architect.llm import clip, clip_list, structured
 
-Line = Annotated[str, StringConstraints(min_length=1, max_length=600)]
-RefId = Annotated[str, StringConstraints(min_length=1, max_length=41)]
+Line = Annotated[str, clip(600), StringConstraints(min_length=1)]
+RefId = Annotated[str, clip(41), StringConstraints(min_length=1)]
 
 
 class Alternative(BaseModel):
-    topology: str = Field(max_length=40)
-    summary: str = Field(max_length=600)
-    rejected_because: str = Field(max_length=900)
+    topology: Annotated[str, clip(40)]
+    summary: Annotated[str, clip(600)]
+    rejected_because: Annotated[str, clip(900)]
 
 
 class Targets(BaseModel):
     latency_p95_s: float = Field(gt=0, le=86400)
     availability_pct: float = Field(ge=90, le=100)
-    quality: str = Field(min_length=1, max_length=400)
+    quality: Annotated[str, clip(400), Field(min_length=1)]
 
 
 class Risk(BaseModel):
@@ -33,28 +33,28 @@ class Risk(BaseModel):
 
 class RunbookItem(BaseModel):
     failure_mode: RefId
-    alert: Annotated[str, StringConstraints(min_length=1, max_length=400)]
+    alert: Annotated[str, clip(400), StringConstraints(min_length=1)]
     meaning: Line
     first_action: Line
 
 
 class Record(BaseModel):
-    context: str = Field(min_length=1, max_length=2500)
-    decision: str = Field(min_length=1, max_length=1800)
-    alternatives: list[Alternative] = Field(default_factory=list, max_length=3)
-    trade_offs: list[Line] = Field(min_length=1, max_length=8)
+    context: Annotated[str, clip(2500), Field(min_length=1)]
+    decision: Annotated[str, clip(1800), Field(min_length=1)]
+    alternatives: Annotated[list[Alternative], clip_list(3)] = Field(default_factory=list)
+    trade_offs: Annotated[list[Line], clip_list(8)] = Field(min_length=1)
     targets: Targets
-    scaling: str = Field(min_length=1, max_length=1800)
-    rollout: list[Line] = Field(min_length=2, max_length=6)
-    rollback: str = Field(min_length=1, max_length=900)
-    open_risks: list[Risk] = Field(default_factory=list, max_length=8)
-    runbook: list[RunbookItem] = Field(min_length=1, max_length=10)
+    scaling: Annotated[str, clip(1800), Field(min_length=1)]
+    rollout: Annotated[list[Line], clip_list(6)] = Field(min_length=2)
+    rollback: Annotated[str, clip(900), Field(min_length=1)]
+    open_risks: Annotated[list[Risk], clip_list(8)] = Field(default_factory=list)
+    runbook: Annotated[list[RunbookItem], clip_list(10)] = Field(min_length=1)
 
 
 class Variant(BaseModel):
     blueprint: dict
-    summary: str = Field(min_length=1, max_length=900)
-    changes: list[Annotated[str, StringConstraints(min_length=1, max_length=400)]] = Field(min_length=1, max_length=6)
+    summary: Annotated[str, clip(900), Field(min_length=1)]
+    changes: Annotated[list[Annotated[str, clip(400), StringConstraints(min_length=1)]], clip_list(6)] = Field(min_length=1)
 
 
 def write(gateway, body: dict, cap: dict, alternatives: list[dict], assumptions: list[str]) -> dict:

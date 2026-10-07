@@ -22,7 +22,7 @@ MESSAGES = {"off": "The architect is switched off right now. Try again later.",
             "busy": "The architect is busy. Try again in a few minutes."}
 STORE = RunStore("architect", KEEP_DAYS, holding=("queued", "running", "waiting"), interrupted="interrupted", id_bytes=16,
                  messages=MESSAGES)
-DEFAULTS = dict(daily_usd=0.25, run_usd=0.20, run_tokens=1_500_000, run_tool_calls=1, run_seconds=900, per_ip_day=3,
+DEFAULTS = dict(strong_effort="low", daily_usd=0.25, run_usd=0.20, run_tokens=1_500_000, run_tool_calls=1, run_seconds=900, per_ip_day=3,
                 concurrent=2, queue=3, free_calls_day=900)
 
 
