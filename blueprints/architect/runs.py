@@ -87,7 +87,7 @@ def design(gw, emit, inp: dict, src: dict) -> tuple[str, dict]:
 
 def make_work(get_config, get_factory, get_sources):
     def work(conn, run_id, emit):
-        cfg = get_config()
+        cfg = STORE.effective_config(conn, get_config())     # the console's settings apply to this run
         run = STORE.get_run(conn, run_id)
         inp = dict(run["input"])
         gw = make_gateway(cfg, conn, run_id, emit, get_factory(cfg), inp.get("consent") is True,

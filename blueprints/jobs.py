@@ -7,7 +7,8 @@ from blueprints import generate, living, store
 from blueprints.cost import load_pricing
 from blueprints.living import GENERATE_JOB
 from blueprints.publishing import publish_library
-from core.claude_cli import ClaudeCliBackend
+from core.claude_cli import ClaudeCliBackend  # noqa: F401  (kept importable for callers and tests)
+from core.control.batch import make_backend
 from core.jobs import enqueue
 from core.periodic import schedule
 from core.scheduler import IST, GuardedBackend, in_night_window
@@ -45,7 +46,7 @@ def build_job_types(conn, backend=None, use_llm: bool = True, data_root=None, br
     if not use_llm:
         backend = None
     elif backend is None:
-        backend = GuardedBackend(conn, ClaudeCliBackend(model=os.environ.get("BLUEPRINTS_MODEL", "sonnet")))
+        backend = make_backend(conn, os.environ, "BLUEPRINTS_MODEL")      # OpenRouter under the daily cap, else the Claude CLI
 
     def pick(job, out):
         brief = store.next_brief(conn, briefs)
