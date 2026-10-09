@@ -139,16 +139,102 @@ Data: one SQLite database (WAL) in Blueprints' volume, backed up nightly by the 
 
 ## 8. Operations
 
+Written in ASD-STE100 style (Simplified Technical English): one instruction in each step, active voice, short
+sentences. Do all the steps on the server, as root.
+
+### Procedure 1: Deploy a new version
+
+1. Go to the Blueprints folder:
+
+   ```bash
+   cd /opt/blueprints
+   ```
+
+2. Write down the current commit. You need it if you must go back (Procedure 2).
+
+   ```bash
+   git rev-parse --short HEAD
+   ```
+
+3. Get the new version:
+
+   ```bash
+   git pull
+   ```
+
+4. Build and start the app. Use the two `-f` flags.
+
+   CAUTION: Without the two `-f` flags, the app does not get its optional read-only data.
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.siblings.yml up -d --build
+   ```
+
+5. Make sure that the web container is healthy. Do this command until it shows `healthy` (about 30 seconds).
+
+   ```bash
+   docker inspect -f '{{.State.Health.Status}}' blueprints-web-1
+   ```
+
+6. Make sure that the worker started without errors. The command must show `0`.
+
+   ```bash
+   docker logs --since 2m blueprints-batch-1 2>&1 | grep -c Traceback
+   ```
+
+   If the command shows more than `0`, read the log (`docker logs --since 2m blueprints-batch-1`). A missing package
+   usually means that `requirements.txt` was not made again after a dependency change.
+
+7. Make sure that the public site answers. The command must show `200`.
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' https://blueprints.naveenlabs.tech/healthz
+   ```
+
+8. Do this step only on the first deploy. Publish the library one time.
+
+   ```bash
+   docker exec blueprints-batch-1 python -m blueprints.cli publish
+   ```
+
+### Procedure 2: Go back to the previous version
+
+Use this procedure if Procedure 1 fails at step 5, 6 or 7.
+
+1. Go to the Blueprints folder (`cd /opt/blueprints`).
+2. Get the commit that you wrote down in Procedure 1, step 2:
+
+   ```bash
+   git checkout <commit>
+   ```
+
+3. Do Procedure 1, steps 4 to 7 again.
+
+### Procedure 3: Stop the Architect immediately
+
+Use this procedure if the Architect costs too much or gives bad results. The agent stops when any one of its switches
+is off. Designs that started before continue to their limits.
+
+1. Open `https://blueprints.naveenlabs.tech/admin` and log in.
+2. Push "Turn new designs off".
+3. Open `https://blueprints.naveenlabs.tech/architect`. Make sure that it shows "The architect is not taking new
+   designs right now".
+
+To keep the Architect off after a restart, also set `ARCHITECT_ENABLED=0` in `/opt/blueprints/.env`. Then do this
+command:
+
 ```bash
-cd /opt/blueprints && git pull
-docker compose -f docker-compose.yml -f docker-compose.siblings.yml up -d --build
-docker inspect -f '{{.State.Health.Status}}' blueprints-web-1     # wait for "healthy"
-docker logs --since 2m blueprints-batch-1
+docker compose -f docker-compose.yml -f docker-compose.siblings.yml up -d --force-recreate web
 ```
 
-First deploy: run `python -m blueprints.cli publish` once in the batch container. Rollback: `git checkout <previous
-commit>`, then the same `up -d --build`. Every setting is in `.env.example`. Shared code comes from the `atlas`
-monorepo (`CORE_VERSION`; `scripts/sync_core.py --check`).
+CAUTION: If the owner's control console has an override that sets `architect.enabled` to on, the `.env` value has no
+effect. The switch in `/admin` always works.
+
+To stop all paid work in Blueprints (agent and batch), set "stop all" in the control console.
+
+### Settings
+
+`.env.example` lists every setting. Shared code comes from the `atlas` monorepo (`CORE_VERSION`; `scripts/sync_core.py --check`).
 
 ## 9. Quality gates
 
