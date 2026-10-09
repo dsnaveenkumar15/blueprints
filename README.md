@@ -2,9 +2,9 @@
 
 Linted, living reference architectures for agentic systems.
 
-A self-contained app of the naveenlabs AI galaxy (siblings: Trust, Radar). Clone it, install, run: nothing else is needed. Blueprints reads Trust's tool grades and Radar's framework facts from their published data (`TRUST_DATA_ROOT`, `RADAR_DATA_ROOT`); with none present it still works and shows its empty states.
-Design: `docs/design.md` (one design for all three apps; this one implements §4 (core) and §7 (Blueprints)).
-Architecture, security, reliability and operations: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+A self-contained app. Clone it, install, run: nothing else is needed. Blueprints reads Trust's tool grades and Radar's framework facts from their published data (`TRUST_DATA_ROOT`, `RADAR_DATA_ROOT`); with none present it still works and shows its empty states.
+How it works, with diagrams (architecture, security, reliability, operations): [`docs/blueprints/ARCHITECTURE.md`](docs/blueprints/ARCHITECTURE.md).
+What was built and when: [`docs/blueprints/HISTORY.md`](docs/blueprints/HISTORY.md).
 
 Production at a glance: a hardened web container (non-root, read-only image, no Linux capabilities, CPU and memory
 limits) with a Docker health check on `/healthz` (which opens the database); HSTS, a strict CSP and a permissions
