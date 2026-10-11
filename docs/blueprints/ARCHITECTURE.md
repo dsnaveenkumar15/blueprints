@@ -62,6 +62,8 @@ flowchart LR
 - **Model:** one paid model on OpenRouter (`BATCH_MODEL`, data collection denied) under a daily dollar cap
   (`BATCH_DAILY_USD`, default $0.03; one generation is about five calls, about three cents). When the cap is reached
   the job waits for the next UTC day; rate-limited calls retry in minutes; over-long text is cut to the schema's limits.
+- **Current state (2026-10-11):** batch is switched off in the owner's console, so no new drafts are generated while the
+  3 existing drafts wait for review.
 - **Prices** live in `blueprints/pricing.json` with source and date; a table older than 45 days is flagged stale.
 - A blueprint that fails today's linter, has a refresh queued or is priced from a stale table is shown with a banner,
   never hidden.
