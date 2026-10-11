@@ -108,6 +108,9 @@ Stored in Blueprints' own database (`core/control/`): `architect.enabled`, `.dai
 OpenRouter key's weekly limit, default 90); `global.stop_all`. Overrides beat the `.env` default until cleared; every
 change is stored with a note. The owner's private console uses `/internal/control` (404 through the proxy, without
 the token, or when `CONTROL_TOKEN` is unset).
+Its report also lists the latest 20 agent runs and batch jobs as metadata only (when, mode, outcome, duration, cost,
+job type, a short error); never the visitor's input, their hashed address, the job payload or the run id, which is the
+private result link.
 
 ## 6. Security
 

@@ -22,7 +22,7 @@ detail.
 | 2026-10-07 | "Design canvas" identity: gallery home with filters in the hero, topology thumbnails, flow canvas on each blueprint. Architect agent: clarify, ground, draft, record and runbook, check-and-fix loop, one paid review that also red-teams; launch gate 8/8; switched on. Salted visitor keys; compact question cards |
 | 2026-10-08 | Owner controls (Architect switch and limits, batch cap, weekly brake, stop-all) and the private control interface; generation moved to OpenRouter with a daily cap; rate-limited calls retry in minutes |
 | 2026-10-09 | Own architecture and history documents |
-| 2026-10-11 | Nightly generation paused from the owner's console until the waiting drafts are reviewed |
+| 2026-10-11 | Nightly generation paused from the owner's console until the waiting drafts are reviewed; the private report lists recent runs and batch jobs (metadata only) for the console |
 
 ## Open items
 
