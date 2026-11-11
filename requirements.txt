@@ -7,6 +7,8 @@ pydantic==2.13.5
 pydantic_core==2.46.5
 httpx==0.28.1
 python-multipart==0.0.32
+# security floor for a dependency of httpx (PYSEC-2026-4320 in 2026.7.22)
+certifi==2026.10.18
 # agent orchestration and model client (pinned: APIs shift between releases)
 langgraph==1.2.13
 langgraph-checkpoint-sqlite==3.1.1
