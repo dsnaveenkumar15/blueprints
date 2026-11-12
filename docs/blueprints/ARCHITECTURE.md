@@ -1,7 +1,8 @@
 # Blueprints: architecture
 
 How Blueprints (`blueprints.naveenlabs.tech`) is built, secured and run. This document covers Blueprints only. What
-was built and when: [`HISTORY.md`](HISTORY.md).
+was built and when: [`HISTORY.md`](HISTORY.md). A visual walkthrough for presenting: [`explainer.html`](explainer.html)
+(open it in a browser; the 3D views need an internet connection for three.js).
 
 Last reviewed: 2026-10-09.
 
@@ -35,6 +36,7 @@ flowchart LR
     web -- "architect models" --> or
     web -- "Finder notes" --> ollama["Ollama on the<br/>Docker network (optional)"]
     inputs[("Trust grades and Radar data<br/>optional, read-only")] -. "living links" .-> batch
+    inputs -. "lint context" .-> web
     batch -- heartbeat --> kuma["uptime monitor<br/>KUMA_PUSH_URL"]
 ```
 
@@ -243,7 +245,7 @@ To stop all paid work in Blueprints (agent and batch), set "stop all" in the con
 
 ## 9. Quality gates
 
-- About 710 tests in CI on every push.
+- About 720 tests in CI on every push.
 - Library evaluation (`python -m evals.blueprints_eval`) at 1.00.
 - Architect launch gate (`python -m evals.architect_eval`, real models, run by hand): 8/8 passed at $0.024 mean and
   166 s mean before it was switched on.

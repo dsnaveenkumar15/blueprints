@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>How Blueprints is built (3D deck)</title>
+<meta name="description" content="Engineering deck for Blueprints: linted, priced reference architectures for AI agents, and an Architect agent whose designs code checks, prices and red-teams." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='8' fill='%23181a22' stroke='%238B8BFF' stroke-width='2'/%3E%3Crect x='6' y='8' width='8' height='6' rx='2' fill='%238B8BFF'/%3E%3Crect x='18' y='18' width='8' height='6' rx='2' fill='%233DD39B'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  :root {
+    --accent: #8b8bff; --accent-soft: #b4b4ff; --amber: #e2ae4a; --amber-soft: #f0c878; --red-soft: #f2777c;
+    --blue-soft: #7fb3ff; --purple-soft: #c0a3ff; --orange-soft: #f0883e; --grey: #9298a6;
+    --bg: #0f1015; --panel: #181a22; --panel-2: #20232d; --border: #2a2d38;
+    --text: #edeef3; --text-dim: #c9ccd6; --text-dimmer: #9298a6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* Fluid scale: every rem grows with the screen, so a large display shows larger content instead of empty space */
+  html { font-size: clamp(14px, 0.5vw + 0.95vh, 22px); }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'IBM Plex Sans', system-ui, sans-serif; font-weight: 300; letter-spacing: 0.01em; overflow: hidden; }
+  body { display: flex; flex-direction: column; padding: 1.1rem 1.4rem; gap: 0.85rem; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-bottom: 0.7rem; border-bottom: 1px solid var(--border); }
+  header .brand { display: flex; align-items: center; gap: 0.55rem; font-weight: 700; letter-spacing: -0.01em; font-size: 1.2rem; }
+  header .brand svg { width: 22px; height: 22px; }
+  header .brand .em, .em { color: var(--accent); }
+  header .subtitle { color: var(--text-dim); font-size: 0.78rem; }
+
+  main { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+  .slide { position: absolute; inset: 0; overflow-y: auto; padding-right: 6px; display: none; flex-direction: column; gap: 0.85rem; }
+  .slide.active { display: flex; animation: fade .3s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .slide.active { animation: none; } }
+  .slide::-webkit-scrollbar { width: 6px; }
+  .slide::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .slide-num { color: var(--text-dimmer); font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.06em; }
+  h1.slide-title { font-size: 1.6rem; font-weight: 600; letter-spacing: -0.015em; color: var(--text); }
+  .slide-lead { color: var(--text-dim); font-size: 0.9rem; line-height: 1.55; max-width: 82ch; }
+  .slide-lead strong { color: var(--text); font-weight: 500; }
+  code.k, .mono { font-family: 'IBM Plex Mono', monospace; }
+  code.k { color: var(--blue-soft); font-size: 0.92em; }
+
+  .card { background: linear-gradient(160deg, var(--panel) 0%, var(--panel-2) 100%); border: 1px solid var(--border); border-radius: 0.7rem; padding: 0.9rem 1.05rem; }
+  .card h3 { font-size: 0.8rem; color: var(--text); font-weight: 600; margin-bottom: 0.45rem; }
+  .card p, .card li { font-size: 0.85rem; line-height: 1.55; color: var(--text-dim); }
+  .card ul { padding-left: 1.1rem; }
+  .card p strong, .card li strong { color: var(--text); font-weight: 500; }
+  .card p + p { margin-top: 0.5rem; }
+  .card.green  { border-left: 3px solid var(--accent); }
+  .card.amber  { border-left: 3px solid var(--amber); }
+  .card.blue   { border-left: 3px solid var(--blue-soft); }
+  .card.red    { border-left: 3px solid var(--red-soft); }
+  .card.purple { border-left: 3px solid var(--purple-soft); }
+  .stack-col { display: flex; flex-direction: column; gap: 0.6rem; min-height: 0; }
+
+  .example { padding: 0.65rem 0.85rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 0.5rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.76rem; color: var(--text-dim); line-height: 1.62; white-space: pre-wrap; overflow-x: auto; }
+  .example b { color: var(--amber-soft); font-weight: 500; }
+  .example .out { color: var(--accent); }
+  .example .bad { color: var(--red-soft); }
+  .example .c { color: var(--text-dimmer); }
+  .example .kw { color: var(--purple-soft); }
+  .example mark { background: rgba(248,81,73,0.18); color: var(--red-soft); padding: 0 2px; border-radius: 3px; }
+  .ex-title { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--text-dimmer); margin-bottom: 0.3rem; }
+
+  .canvas-wrap { background: linear-gradient(160deg, var(--panel) 0%, var(--panel-2) 100%); border: 1px solid var(--border); border-radius: 0.8rem; position: relative; overflow: hidden; min-height: 300px; }
+  .canvas-wrap canvas { display: block; width: 100% !important; height: 100% !important; }
+  .canvas-hint { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(14,15,12,0.88); color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; padding: 0.3rem 0.65rem; border-radius: 0.3rem; border: 1px solid var(--border); pointer-events: none; z-index: 5; white-space: nowrap; }
+  /* 3D labels are real HTML text, so they are as sharp as the page */
+  .labels3d { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  /* name only; hover a label to read its detail line */
+  .lbl3d { transform: translateY(-50%); background: rgba(7,11,16,0.85); border: 1px solid var(--c); border-left: 2px solid var(--c);
+    border-radius: 3px; padding: 0 4px 1px; white-space: nowrap; line-height: 1.2; text-align: left; pointer-events: auto; cursor: default; }
+  .lbl3d b { display: block; font: 600 max(9px, 0.585rem) 'IBM Plex Sans', sans-serif; color: #fff; letter-spacing: 0; }
+  .lbl3d i { display: none; font: 400 max(9px, 0.51rem) 'IBM Plex Mono', monospace; font-style: normal; color: #c9d1d9; }
+  .lbl3d:hover { position: relative; z-index: 5; background: rgba(7,11,16,0.97); padding: 1px 6px 2px; }
+  .lbl3d:hover b { font-size: max(11px, 0.72rem); }
+  .lbl3d:hover i { display: block; font-size: max(10px, 0.62rem); }
+  .lbl3d.small b { font-size: max(9px, 0.54rem); }
+  @media (max-width: 900px) { .lbl3d b { font-size: 8px; } }
+  .side-extra { display: none; }
+  .facts-list { list-style: none; padding: 0; margin: 0.2rem 0 0; }
+  .facts-list li { padding: 0.4rem 0.7rem; border-left: 2px solid var(--border); background: rgba(255,255,255,0.02); border-radius: 0 0.4rem 0.4rem 0;
+    font-size: 0.84rem; line-height: 1.45; color: var(--text-dim); }
+  .facts-list li + li { margin-top: 0.35rem; }
+  .facts-list b { color: var(--text); font-weight: 600; margin-right: 0.35rem; }
+  .zoom3d { position: absolute; top: 10px; right: 10px; z-index: 6; display: flex; flex-direction: column; gap: 4px; }
+  .zoom3d button { min-width: 2rem; height: 2rem; padding: 0 0.4rem; background: rgba(14,15,12,0.88); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; font: 500 0.85rem 'IBM Plex Sans', sans-serif; cursor: pointer; }
+  .zoom3d button:hover { border-color: var(--accent); color: var(--accent); }
+  .zoom3d button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .legend3d { position: absolute; top: 10px; left: 12px; z-index: 6; display: flex; gap: 0.9rem; font-size: 0.8rem; color: var(--text); pointer-events: none; }
+  .legend3d span::before { content: ""; display: inline-block; width: 11px; height: 11px; border-radius: 2px; background: var(--c); margin-right: 6px; vertical-align: -1px; }
+  .canvas-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-dimmer); font-size: 0.85rem; text-align: center; padding: 1rem; }
+  .canvas-wrap.ready .canvas-wait { display: none; }
+
+  .metric-table { display: flex; flex-direction: column; gap: 0.3rem; }
+  .metric-row { display: grid; grid-template-columns: var(--cols, 14rem 1fr 1fr 1fr); gap: 0.6rem; padding: 0.45rem 0.65rem; border-radius: 0.35rem; background: rgba(255,255,255,0.025); font-family: 'IBM Plex Mono', monospace; font-size: 0.77rem; align-items: center; color: var(--text-dim); }
+  .metric-row.head { background: none; color: var(--text-dimmer); font-family: 'IBM Plex Sans', sans-serif; font-size: 0.72rem; padding-bottom: 0.1rem; }
+  .metric-row .m { color: var(--text); font-family: 'IBM Plex Sans', sans-serif; font-size: 0.8rem; }
+  .metric-row .s { font-family: 'IBM Plex Sans', sans-serif; font-size: 0.8rem; line-height: 1.45; }
+  .metric-row .c { text-align: center; }
+  .metric-row .good { color: var(--accent); font-weight: 500; }
+  .metric-row .bad { color: var(--red-soft); }
+  .metric-row .warn { color: var(--amber-soft); }
+
+  .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.85rem; }
+  .card-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .split { flex: 1; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1rem; min-height: 0; }
+  .split > .canvas-wrap { min-height: 340px; }
+
+  .walk { display: flex; flex-direction: column; gap: 0.55rem; }
+  .walk-step { display: grid; grid-template-columns: 2.2rem 1fr; gap: 0.8rem; align-items: start; padding: 0.7rem 0.95rem; background: linear-gradient(160deg, var(--panel), var(--panel-2)); border: 1px solid var(--border); border-radius: 0.6rem; border-left: 3px solid var(--accent); }
+  .walk-step .n { font-family: 'IBM Plex Mono', monospace; font-size: 1.25rem; font-weight: 500; color: var(--accent); line-height: 1; }
+  .walk-step .b { color: var(--text); font-weight: 500; font-size: 0.92rem; }
+  .walk-step .d { color: var(--text-dim); font-size: 0.83rem; line-height: 1.5; margin-top: 0.2rem; }
+  .walk-step.s2 { border-left-color: var(--blue-soft); } .walk-step.s2 .n { color: var(--blue-soft); }
+  .walk-step.s3 { border-left-color: var(--amber); } .walk-step.s3 .n { color: var(--amber-soft); }
+  .walk-step.s4 { border-left-color: var(--purple-soft); } .walk-step.s4 .n { color: var(--purple-soft); }
+
+  .title-slide { justify-content: center; align-items: center; text-align: center; gap: 0.7rem !important; }
+  .title-slide h1 { font-size: 3.4rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; color: var(--text); }
+  .title-slide .sub { font-size: 1.1rem; color: var(--text-dim); max-width: 760px; line-height: 1.55; }
+  .title-slide .facts { display: flex; gap: 2.2rem; margin-top: 1.2rem; flex-wrap: wrap; justify-content: center; }
+  .title-slide .facts div { text-align: center; }
+  .title-slide .facts b { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 1.6rem; font-weight: 500; color: var(--text); }
+  .title-slide .facts span { font-size: 0.78rem; color: var(--text-dimmer); }
+  .title-slide .live { margin-top: 1rem; font-size: 0.85rem; color: var(--text-dimmer); }
+  .title-slide .live a { color: var(--accent); }
+
+  .callout-big { padding: 1.1rem; background: linear-gradient(135deg, rgba(245,166,35,0.12) 0%, rgba(88,166,255,0.06) 100%); border: 1px solid rgba(245,166,35,0.35); border-radius: 0.7rem; text-align: center; }
+  .callout-big .big { font-family: 'IBM Plex Mono', monospace; font-size: 2.3rem; font-weight: 500; color: var(--accent); line-height: 1; letter-spacing: -0.02em; }
+  .callout-big .lbl { font-size: 0.8rem; color: var(--text-dim); margin-top: 0.4rem; }
+  .callout-big .desc { margin-top: 0.7rem; color: var(--text-dim); font-size: 0.84rem; line-height: 1.55; }
+  .callout-big.red { background: linear-gradient(135deg, rgba(248,81,73,0.12) 0%, rgba(210,153,34,0.06) 100%); border-color: rgba(248,81,73,0.35); }
+  .callout-big.red .big { color: var(--red-soft); }
+
+  .why { padding: 0.7rem 0.95rem; border-left: 3px solid var(--amber); background: rgba(210,153,34,0.08); border-radius: 0 0.5rem 0.5rem 0; font-size: 0.85rem; line-height: 1.55; color: var(--text-dim); }
+  .why strong { color: var(--amber-soft); font-weight: 600; margin-right: 0.35rem; }
+
+  .verdict { display: inline-block; font-family: 'IBM Plex Sans', sans-serif; font-size: 0.72rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 999px; margin-right: 0.4rem; }
+  .verdict.got { background: rgba(248,81,73,0.18); color: var(--red-soft); }
+  .verdict.ok { background: rgba(245,166,35,0.15); color: var(--accent); }
+
+  footer { display: flex; align-items: center; justify-content: space-between; padding: 0.55rem 1rem; background: linear-gradient(160deg, var(--panel) 0%, var(--panel-2) 100%); border: 1px solid var(--border); border-radius: 0.65rem; gap: 1rem; }
+  .nav-left, .nav-right, .nav-center { display: flex; align-items: center; gap: 0.7rem; }
+  .btn { background: rgba(88,166,255,0.1); color: var(--text); border: 1px solid rgba(88,166,255,0.35); padding: 0.45rem 0.9rem; border-radius: 0.4rem; font-family: 'IBM Plex Sans', sans-serif; font-size: 0.8rem; font-weight: 500; cursor: pointer; }
+  .btn:hover:not(:disabled) { background: rgba(88,166,255,0.2); border-color: var(--blue-soft); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.primary { background: rgba(245,166,35,0.13); border-color: rgba(245,166,35,0.5); }
+  .btn.primary:hover:not(:disabled) { background: rgba(245,166,35,0.25); border-color: var(--accent); }
+  .btn:focus-visible, .dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .step-dots { display: flex; gap: 0.28rem; flex-wrap: wrap; }
+  .step-dots .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); cursor: pointer; border: 0; padding: 0; }
+  .step-dots .dot.active { background: var(--accent); box-shadow: 0 0 0 3px rgba(245,166,35,0.2); }
+  .step-dots .dot.done { background: rgba(245,166,35,0.4); }
+  .step-label { color: var(--text-dim); font-size: 0.75rem; font-family: 'IBM Plex Mono', monospace; white-space: nowrap; }
+  .step-label b { color: var(--accent); font-weight: 500; }
+
+  /* Wide screens: text in a left column, the 3D view full height on the right (a 3.8:1 strip shrinks the diagram) */
+  @media (min-aspect-ratio: 17/10) and (min-width: 1100px) {
+    .slide.scene-slide.active { display: grid; grid-template-columns: minmax(16rem, 26%) minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr);
+      column-gap: 1.8rem; row-gap: 0.85rem; align-content: stretch; }
+    .scene-slide > .slide-num, .scene-slide > h1, .scene-slide > .slide-lead, .scene-slide > .side-extra { grid-column: 1; }
+    .scene-slide > .side-extra { display: block; align-self: start; min-height: 0; }
+    .scene-slide > .slide-lead { align-self: start; font-size: 1rem; line-height: 1.65; }
+    .scene-slide > .canvas-wrap { grid-column: 2; grid-row: 1 / span 4; min-height: 0; height: 100%; }
+  }
+  @media (max-width: 900px) {
+    body { padding: 0.8rem 0.9rem; }
+    header .subtitle { display: none; }
+    .card-grid, .card-grid.two, .card-grid.four, .split { grid-template-columns: 1fr; }
+    .split > .canvas-wrap { min-height: 300px; }
+    .metric-row { --cols: 1fr 1fr !important; }
+    .metric-row > *:first-child { grid-column: 1 / -1; }
+    .title-slide h1 { font-size: 2.3rem; }
+    .step-dots { display: none; }
+    .canvas-hint { white-space: normal; width: 90%; text-align: center; }
+  }
+
+  /* ---- Blueprints' own look, from the site's "design canvas" theme: Manrope text, a dotted canvas, rounded node
+     cards with ports, violet accent, pill chips and pill buttons ---- */
+  :root { --ok: #3dd39b; --dot: rgba(237,238,243,0.07); --rule: rgba(237,238,243,0.08); --rule-2: rgba(237,238,243,0.14); }
+  html, body { font-family: 'Manrope', system-ui, sans-serif; font-weight: 400; letter-spacing: 0; }
+  body { background: radial-gradient(var(--dot) 1px, transparent 1px) 0 0 / 16px 16px, var(--bg); }
+  h1, h3, header .brand, .title-slide h1, .walk-step .b { font-family: 'Manrope', system-ui, sans-serif; font-weight: 800; letter-spacing: -0.025em; }
+  code.k, .mono, .example, .ex-title, .canvas-hint, .step-label, .callout-big .big, .title-slide .facts b { font-family: 'IBM Plex Mono', monospace; }
+  .metric-row.head, .metric-row .m, .metric-row .s, .lbl3d b, .zoom3d button, .legend3d, .verdict, .btn { font-family: 'Manrope', system-ui, sans-serif; }
+  header { border-bottom-color: var(--rule-2); }
+  header .brand img, header .brand svg { border-radius: 7px; }
+  .slide-num { align-self: flex-start; justify-self: start; padding: 0.22rem 0.75rem; border-radius: 999px; background: rgba(139,139,255,0.14);
+    color: var(--accent); font: 700 0.66rem 'Manrope', sans-serif; letter-spacing: 0.02em; }
+  h1.slide-title { font-weight: 800; letter-spacing: -0.025em; }
+  /* Cards are canvas nodes: rounded, raised, with a port on each side */
+  .card { position: relative; background: var(--panel); border: 1px solid var(--rule-2); border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 2px 12px rgba(0,0,0,0.25); }
+  .card::before, .card::after { content: ""; position: absolute; top: 50%; width: 9px; height: 9px; margin-top: -4.5px; border-radius: 50%;
+    background: var(--bg); border: 2px solid var(--accent); }
+  .card::before { left: -6px; } .card::after { right: -6px; }
+  .card h3 { font-size: 0.82rem; }
+  .card.green { border-left: 3px solid var(--ok); } .card.purple { border-left: 3px solid var(--accent); }
+  .canvas-wrap { background: #14151c; border: 1px solid var(--rule-2); border-radius: 16px; }
+  .canvas-hint, .zoom3d button { border-radius: 999px; }
+  .zoom3d button { min-width: 2.1rem; }
+  .example { border-radius: 12px; background: rgba(139,139,255,0.05); }
+  .metric-row { border-radius: 10px; }
+  .metric-row.head { text-transform: none; font-weight: 700; }
+  .metric-row .m { font-weight: 700; }
+  .metric-row .good { color: var(--ok); }
+  .callout-big { border-radius: 16px; background: linear-gradient(135deg, rgba(139,139,255,0.16) 0%, rgba(61,211,155,0.06) 100%); border-color: rgba(139,139,255,0.4); }
+  .why { border-radius: 0 12px 12px 0; }
+  .walk-step { border-radius: 14px; }
+  .lbl3d { border-radius: 6px; background: rgba(15,16,21,0.9); }
+  .lbl3d b { font-weight: 700; }
+  .lbl3d.topo { background: rgba(226,174,74,0.16); } .lbl3d.topo b { color: #f0c878; }   /* topology names on slide 4 */
+  .lbl3d.prof { background: rgba(79,209,197,0.14); } .lbl3d.prof b { color: #8ee8df; }   /* profile names on slide 4 */
+  .legend3d span::before { border-radius: 50%; }
+  footer { background: var(--panel); border: 1px solid var(--rule-2); border-radius: 18px; }
+  .btn { border-radius: 999px; font-weight: 700; background: transparent; border-color: var(--rule-2); }
+  .btn:hover:not(:disabled) { background: rgba(139,139,255,0.1); border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #0f1015; }
+  .btn.primary:hover:not(:disabled) { background: #a3a3ff; border-color: #a3a3ff; }
+  .step-dots .dot.active { box-shadow: 0 0 0 3px rgba(139,139,255,0.25); }
+  .facts-list li { border-left-color: var(--accent); border-radius: 0 10px 10px 0; }
+  @media (min-aspect-ratio: 17/10) and (min-width: 1100px) { .scene-slide > .slide-lead { font-size: 0.95rem; } }
+
+  /* Title: text on the left, the design canvas on the right */
+  .title-slide.bp-title.active { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); column-gap: 2.6rem !important;
+    align-items: stretch; justify-items: stretch; text-align: left; }
+  .bp-title .t-text { display: flex; flex-direction: column; justify-content: center; gap: 1rem; min-width: 0; }
+  .bp-title h1 { font-size: 3.6rem; }
+  .bp-title .sub { max-width: 60ch; font-size: 1rem; }
+  .bp-title .facts { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 0.8rem; margin-top: 0.6rem; }
+  .bp-title .facts div { text-align: left; padding: 0.55rem 0.9rem; border-radius: 14px; background: var(--panel); border: 1px solid var(--rule-2); }
+  .bp-title .facts b { font-size: 1.35rem; }
+  .bp-title .canvas-wrap { min-height: 320px; }
+  @media (max-width: 900px) {
+    .title-slide.bp-title.active { display: flex; align-items: stretch; }
+    .bp-title h1 { font-size: 2.3rem; }
+    .bp-title .facts { grid-template-columns: repeat(2, auto); }
+    .bp-title .canvas-wrap { flex: none; height: 320px; }
+    .card::before, .card::after { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#181a22" stroke="#8b8bff" stroke-width="1.6"/><rect x="6" y="8" width="8" height="6" rx="2" fill="#8b8bff"/><rect x="18" y="18" width="8" height="6" rx="2" fill="#3dd39b"/><path d="M14 11 H17 Q19 11 19 13 V18" fill="none" stroke="#8b8bff" stroke-width="1.6"/><circle cx="14" cy="11" r="1.4" fill="#edeef3"/><circle cx="19" cy="18" r="1.4" fill="#edeef3"/></svg>
+    <span>How Blueprints is built <span class="em">3D deck</span></span>
+  </div>
+  <div class="subtitle">Models draft, code decides</div>
+</header>
+
+<main>
+
+  <!-- 1 — Title, on the design canvas -->
+  <section class="slide active title-slide bp-title" data-slide="1">
+    <div class="t-text">
+      <div class="slide-num">Engineering deck</div>
+      <h1>How <span class="em">Blueprints</span> is built</h1>
+      <div class="sub">Blueprints is a library of reference architectures for AI agents, each one linted, priced and kept up to date as the tools it relies on change. Its Architect agent turns a plain-words description into a checked, priced design: models write the drafts, and code decides whether they pass.</div>
+      <div class="facts">
+        <div><b>724</b><span>tests</span></div>
+        <div><b>24 + 19</b><span>lint rules + decision rules, all code</span></div>
+        <div><b>4 of 4</b><span>published blueprints pass today's linter</span></div>
+        <div><b>8 of 8</b><span>launch-gate designs passed</span></div>
+        <div><b>$0.024</b><span>mean cost per design at the gate</span></div>
+      </div>
+      <div class="live">Live at <a href="https://blueprints.naveenlabs.tech/">blueprints.naveenlabs.tech</a> · use the arrow keys or the buttons below</div>
+    </div>
+    <div class="canvas-wrap" id="canvas-1">
+      <div class="canvas-wait">Loading the 3D view. It needs an internet connection for the 3D library.</div>
+      <div class="legend3d"><span style="--c:#8b8bff">model</span><span style="--c:#3dd39b">retrieval</span><span style="--c:#e2ae4a">human gate</span><span style="--c:#9a9fc4">guardrail layer</span></div>
+      <div class="canvas-hint">A real Architect design: each thin layer on a card is one guardrail protecting it · dashed = reads or proposes</div>
+    </div>
+  </section>
+
+  <!-- 2 — The system in 3D -->
+  <section class="slide scene-slide" data-slide="2">
+    <div class="slide-num">The system</div>
+    <h1 class="slide-title">Two containers, one database, <span class="em">and two optional neighbours</span></h1>
+    <p class="slide-lead"><strong>blueprints-web</strong> serves the library, the lint and Finder APIs, and runs the Architect agent on background threads. <strong>blueprints-batch</strong> runs the durable job worker: generation, publishing and reactions to tool and package changes. Trust's grades and Radar's package data are mounted read-only; without them Blueprints still works.</p>
+    <ul class="side-extra facts-list">
+      <li><b>blueprints-web</b> library, APIs, Architect; read-only image</li>
+      <li><b>blueprints-batch</b> leased jobs, cached stages, backoff, dead-letter</li>
+      <li><b>SQLite (WAL)</b> drafts, approvals, Architect runs, settings</li>
+      <li><b>Published library</b> immutable releases with a SHA-256 manifest</li>
+      <li><b>OpenRouter</b> Architect models; nightly drafts under a daily cap</li>
+      <li><b>Trust + Radar data</b> tool grades and package APIs, read-only</li>
+      <li><b>Ollama</b> optional; writes Finder's short adaptation note</li>
+    </ul>
+    <div class="canvas-wrap" id="canvas-2" style="flex:1;">
+      <div class="canvas-wait">Loading the 3D view. It needs an internet connection for the 3D library.</div>
+      <div class="canvas-hint">Coloured dot = request or data · white dot = the reply coming back · drag to rotate</div>
+    </div>
+  </section>
+
+  <!-- 3 — Models draft, code decides -->
+  <section class="slide" data-slide="3">
+    <div class="slide-num">The rule behind every design choice</div>
+    <h1 class="slide-title">Models draft, <span class="em">code decides</span></h1>
+    <p class="slide-lead">A model may turn a description into a requirements profile, draft a design, write the decision record, fix what the checks found and review the result. The topology, the mandatory controls, every lint verdict, every cost and latency number and the decision to publish are plain code, so a fluent draft cannot talk its way past them.</p>
+    <div class="card-grid">
+      <div class="card purple"><h3>What a model writes</h3><ul>
+        <li>The profile behind the visitor's words</li>
+        <li>The design, the decision record, the runbook</li>
+        <li>Fixes for problems the checks list</li>
+        <li>One review that scores and attacks the design</li>
+      </ul></div>
+      <div class="card green"><h3>What code decides</h3><ul>
+        <li>Topology and mandatory controls: 19 decision rules</li>
+        <li>Pass or fail: 24 lint rules, 7 consistency rules</li>
+        <li>Cost, latency and capacity at 1x, 10x, 100x</li>
+        <li>Which questions to ask; what gets published</li>
+      </ul></div>
+      <div class="stack-col">
+        <div class="ex-title">blueprints/cost.py (shortened)</div>
+        <div class="example"><span class="c">"""The model never produces a number; an unpriced
+model makes the estimate incomplete instead of guessing."""</span>
+usd = (step[<b>"input_tokens"</b>] * price[<b>"input_per_mtok"</b>]
+     + step[<b>"output_tokens"</b>] * price[<b>"output_per_mtok"</b>]) / 1e6 * calls
+seconds = (price[<b>"ttft_s"</b>] + out_tokens / price[<b>"tokens_per_s"</b>]) * calls
+monthly = per_request * volume * <span class="out">30</span></div>
+      </div>
+    </div>
+    <div class="why"><strong>Why</strong>Reviewers, interviewers and visitors can check every number by hand. A model can still write a weak design, but it cannot publish one, price one or pick its own topology.</div>
+  </section>
+
+  <!-- 4 — Decision rules in 3D -->
+  <section class="slide scene-slide" data-slide="4">
+    <div class="slide-num">The decision engine</div>
+    <h1 class="slide-title">Same 19 rules, <span class="em">five real profiles</span></h1>
+    <p class="slide-lead">One row per real requirements profile: the four published blueprints and the Architect's online-shop design. A column is a topology. Code rules some topologies out (outline only), keeps the allowed ones (low tiles) and picks one (the violet pillar, named by the rule that chose it).</p>
+    <ul class="side-extra facts-list">
+      <li><b>Interactive latency</b> leaves only workflow or router: no loops</li>
+      <li><b>High risk</b> never allows the autonomous topology</li>
+      <li><b>Open-ended and parallel</b> work gets orchestrator and workers</li>
+      <li><b>Several request kinds</b> are split by a router</li>
+      <li><b>Mandatory controls</b> come from the same profile: PII adds an input filter and an audit log</li>
+    </ul>
+    <div class="canvas-wrap" id="canvas-4" style="flex:1;">
+      <div class="canvas-wait">Loading the 3D view.</div>
+      <div class="legend3d"><span style="--c:#4fd1c5">profile</span><span style="--c:#e2ae4a">topology</span><span style="--c:#8b8bff">chosen</span><span style="--c:#5a6080">allowed</span><span style="--c:#4a4f63">ruled out (outline)</span></div>
+      <div class="canvas-hint">Hover a profile for the facts the rules read · drag to rotate · from blueprints/decision.py</div>
+    </div>
+  </section>
+
+  <!-- 5 — The linter -->
+  <section class="slide" data-slide="5">
+    <div class="slide-num">One linter, everywhere</div>
+    <h1 class="slide-title">24 rules a design must pass, <span class="em">wherever it comes from</span></h1>
+    <p class="slide-lead">The same <code class="k">lint()</code> function checks hand-written seeds, nightly drafts, the Architect's designs, custom blueprints and anything posted to <code class="k">/api/lint-blueprint</code>. Errors block approval and publishing; warnings are shown.</p>
+    <div class="card-grid two" style="align-items:start">
+      <div class="metric-table" style="--cols: 1.15fr 2fr">
+        <div class="metric-row head" style="--cols: 1.15fr 2fr"><span>Rule</span><span>What it enforces</span></div>
+        <div class="metric-row" style="--cols: 1.15fr 2fr"><span class="m">unmitigated-capability</span><span class="s">Write, exec, network or payment on a component needs a control</span></div>
+        <div class="metric-row" style="--cols: 1.15fr 2fr"><span class="m">missing-mandatory</span><span class="s">Every control the decision engine requires is present</span></div>
+        <div class="metric-row" style="--cols: 1.15fr 2fr"><span class="m">forbidden-topology</span><span class="s">Only a topology the rules allow for this profile</span></div>
+        <div class="metric-row" style="--cols: 1.15fr 2fr"><span class="m">gate-not-wired</span><span class="s">When a human gate is required, every acting capability goes through it</span></div>
+        <div class="metric-row" style="--cols: 1.15fr 2fr"><span class="m">unknown-model</span><span class="s">Models must be in the priced table, so cost is never invented</span></div>
+        <div class="metric-row" style="--cols: 1.15fr 2fr"><span class="m">tool-not-eligible</span><span class="s">A referenced tool needs a Trust grade of A or B</span></div>
+        <div class="metric-row" style="--cols: 1.15fr 2fr"><span class="m">unknown-framework</span><span class="s">A framework must be a package Radar tracks</span></div>
+        <div class="metric-row" style="--cols: 1.15fr 2fr"><span class="m">volatile-fact-in-text</span><span class="s">No prices, versions, years or grades in free text (warning)</span></div>
+      </div>
+      <div class="stack-col">
+        <div class="ex-title">blueprints/linter.py</div>
+        <div class="example">VOLATILE = re.compile(
+  r<b>"\$\s?\d|\b\d+\.\d+\.\d+\b|\b(?:19|20)\d{2}\b|\bgrade\s+[A-F]\b"</b>, re.I)
+<span class="c"># prices, versions, years and grades go stale:</span>
+<span class="c"># they belong in the dated tables, not in prose</span></div>
+        <div class="card blue"><h3>The public lint API</h3><p>Lint, decision and cost for any blueprint JSON. Bodies over 200 KB are refused, and the rate limit is spent <strong>before</strong> validation, so malformed requests are not free. NaN and oversized numbers are refused.</p></div>
+        <div class="card amber"><h3>Living context</h3><p>Grades and tracked packages come from Trust's and Radar's published data at lint time, so a tool that drops below B fails a blueprint that was clean yesterday.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 — Cost model, worked -->
+  <section class="slide" data-slide="6">
+    <div class="slide-num">Worked example: the cost model</div>
+    <h1 class="slide-title">$202.50 a month, <span class="em">every cent from a table</span></h1>
+    <p class="slide-lead">The online-shop design from the Architect, priced by <code class="k">estimate()</code> from tokens per step and a dated, sourced price table (as of 1 Oct 2026). Recomputed from the code for this deck; it matches the design's own numbers.</p>
+    <div class="card-grid two" style="align-items:start">
+      <div class="stack-col">
+        <div class="metric-table" style="--cols: 1fr 1.1fr 0.9fr 0.8fr">
+          <div class="metric-row head" style="--cols: 1fr 1.1fr 0.9fr 0.8fr"><span>Step</span><span>Tokens in / out</span><span class="c">Per call</span><span class="c">Latency</span></div>
+          <div class="metric-row" style="--cols: 1fr 1.1fr 0.9fr 0.8fr"><span class="m">triage</span><span>500 / 40</span><span class="c">$0.00070</span><span class="c">0.77 s</span></div>
+          <div class="metric-row" style="--cols: 1fr 1.1fr 0.9fr 0.8fr"><span class="m">answer</span><span>3,000 / 250</span><span class="c">$0.00425</span><span class="c">2.17 s</span></div>
+          <div class="metric-row" style="--cols: 1fr 1.1fr 0.9fr 0.8fr"><span class="m">draft-action</span><span>1,200 / 120</span><span class="c">$0.00180</span><span class="c">1.30 s</span></div>
+          <div class="metric-row" style="--cols: 1fr 1.1fr 0.9fr 0.8fr;background:rgba(255,255,255,0.04)"><span class="m">per request</span><span></span><span class="c good">$0.00675</span><span class="c good">4.23 s</span></div>
+        </div>
+        <div class="example">$0.00675 × 1,000 requests a day × 30 days = <span class="out">$202.50 a month</span>
+4.23 s end to end against the <b>5 s</b> interactive target</div>
+      </div>
+      <div class="stack-col">
+        <div class="metric-table" style="--cols: 0.6fr 1fr 1fr">
+          <div class="metric-row head" style="--cols: 0.6fr 1fr 1fr"><span>Scale</span><span>Requests a day</span><span>Per month</span></div>
+          <div class="metric-row" style="--cols: 0.6fr 1fr 1fr"><span class="m">1x</span><span>1,000</span><span class="good">$202.50</span></div>
+          <div class="metric-row" style="--cols: 0.6fr 1fr 1fr"><span class="m">10x</span><span>10,000</span><span class="bad">$2,025.00</span></div>
+          <div class="metric-row" style="--cols: 0.6fr 1fr 1fr"><span class="m">100x</span><span>100,000</span><span class="bad">$20,250.00</span></div>
+        </div>
+        <div class="why"><strong>Budget</strong>The profile allows $500 a month, so the capacity check says it plainly: at 10x the design costs $2,025 and the budget is the first limit.</div>
+        <div class="card"><h3>Stated assumptions</h3><p>Token counts are estimates, not measurements; steps run one after another, so parallel branches overstate latency; time to first token and output speed are assumed per model; 30 days a month. A price table older than 45 days is flagged stale.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 — The library -->
+  <section class="slide" data-slide="7">
+    <div class="slide-num">The published library</div>
+    <h1 class="slide-title">Four blueprints, <span class="em">checked again on every publish</span></h1>
+    <p class="slide-lead">The four published blueprints are hand-written seeds. Nightly drafts go through the same linter and wait for the owner's approval; none has been published yet. Each publish re-lints every entry against today's grades, packages and prices. The warnings are in-house tools with no reference Trust could grade.</p>
+    <div class="metric-table">
+      <div class="metric-row head" style="--cols: 1.9fr 1.3fr 0.6fr 0.8fr 1fr 0.8fr"><span>Blueprint</span><span>Topology</span><span class="c">Risk</span><span class="c">Per day</span><span class="c">Per month (budget)</span><span class="c">Errors / warnings</span></div>
+      <div class="metric-row" style="--cols: 1.9fr 1.3fr 0.6fr 0.8fr 1fr 0.8fr"><span class="m">Customer support with approved refunds</span><span>router</span><span class="c">high</span><span class="c">5,000</span><span class="c">$1,477.50 ($2,000)</span><span class="c"><span class="good">0</span> / 1</span></div>
+      <div class="metric-row" style="--cols: 1.9fr 1.3fr 0.6fr 0.8fr 1fr 0.8fr"><span class="m">Payment disputes with human decisions</span><span>router</span><span class="c">high</span><span class="c">800</span><span class="c">$1,060.80 ($3,000)</span><span class="c"><span class="good">0</span> / 2</span></div>
+      <div class="metric-row" style="--cols: 1.9fr 1.3fr 0.6fr 0.8fr 1fr 0.8fr"><span class="m">Code review with a maintainer gate</span><span>orchestrator-workers</span><span class="c">medium</span><span class="c">300</span><span class="c bad">$1,692.00 ($1,500)</span><span class="c"><span class="good">0</span> / 2</span></div>
+      <div class="metric-row" style="--cols: 1.9fr 1.3fr 0.6fr 0.8fr 1fr 0.8fr"><span class="m">Documentation Q&amp;A with cited answers</span><span>workflow</span><span class="c">low</span><span class="c">20,000</span><span class="c bad">$3,210.00 ($3,000)</span><span class="c"><span class="good">0</span> / 0</span></div>
+    </div>
+    <div class="card-grid">
+      <div class="card red"><h3>Over budget, said out loud</h3><p>Two of four (50%) cost more than their stated budget, and their pages say so: "Over the stated budget of $3000 per month." The estimate is never trimmed to fit.</p></div>
+      <div class="card green"><h3>Living links</h3><p>A Trust grade change or a Radar breaking change raises an event; batch flags every blueprint that uses that tool or package and queues a refresh. A stale entry gets a banner, never hidden.</p></div>
+      <div class="card blue"><h3>Runnable starters</h3><p>A LangGraph skeleton generated by code, pinned to the version Radar has an API snapshot of, and offered only if all 6 symbols it uses exist there. No model, no network.</p></div>
+    </div>
+  </section>
+
+  <!-- 8 — Architect graph in 3D -->
+  <section class="slide scene-slide" data-slide="8">
+    <div class="slide-num">The Architect agent</div>
+    <h1 class="slide-title">Nine nodes, <span class="em">four of them a model</span></h1>
+    <p class="slide-lead">A LangGraph state graph. Decide, ground, capacity, check and finish are code; draft, record, fix and review use a model. Check and fix loop until the linter and the consistency rules are clean (up to 4 rounds); one review, which also attacks the design, can send it back (up to 3 rounds).</p>
+    <ul class="side-extra facts-list">
+      <li><b>decide</b> 19 rules pick the topology and controls</li>
+      <li><b>ground</b> 2 nearest published blueprints, patterns, allowed models</li>
+      <li><b>draft</b> one design on the chosen topology</li>
+      <li><b>capacity</b> cost and load at 1x, 10x, 100x</li>
+      <li><b>record</b> decision record, runbook, a cheaper variant</li>
+      <li><b>check</b> 24 lint + 7 consistency rules</li>
+      <li><b>review</b> 8 scored areas + red team</li>
+    </ul>
+    <div class="canvas-wrap" id="canvas-8" style="flex:1;">
+      <div class="canvas-wait">Loading the 3D view.</div>
+      <div class="legend3d"><span style="--c:#8b8bff">model</span><span style="--c:#3dd39b">code</span></div>
+      <div class="canvas-hint">White dot = back to check · dashed = early exits to finish (no design, a failed model step, rounds used up)</div>
+    </div>
+  </section>
+
+  <!-- 9 — From words to a profile -->
+  <section class="slide" data-slide="9">
+    <div class="slide-num">Worked example: a launch-gate case</div>
+    <h1 class="slide-title">One sentence in, <span class="em">a profile and a topology out</span></h1>
+    <p class="slide-lead">Case 1 of the launch gate, run on the real models. The visitor's words go to a model once; everything after that on this slide is code.</p>
+    <div class="card-grid two" style="align-items:start">
+      <div class="stack-col">
+        <div class="ex-title">the brief</div>
+        <div class="example">"A support agent for an online shop that answers order questions from help articles and issues refunds up to $200."</div>
+        <div class="walk">
+          <div class="walk-step"><div class="n">1</div><div><div class="b">A model extracts the profile</div><div class="d">Latency, volume, risk, data, autonomy, capabilities: read, write, payment.</div></div></div>
+          <div class="walk-step s2"><div class="n">2</div><div><div class="b">Code ranks the questions</div><div class="d">At most 4, by how much the answer would change the design. The gate skips them and takes the suggested answers, like a visitor would; the design lists 8 assumptions.</div></div></div>
+          <div class="walk-step s3"><div class="n">3</div><div><div class="b">Code decides</div><div class="d">4 rules fire; the topology is a workflow with 4 mandatory controls.</div></div></div>
+        </div>
+      </div>
+      <div class="stack-col">
+        <div class="ex-title">decision trace (blueprints/decision.py, recomputed)</div>
+        <div class="example"><b>interactive-latency</b>      only workflow or router
+<b>prefer-workflow</b>          agentic topologies removed
+<b>autonomous-needs-consent</b> autonomous removed (act_with_approval)
+<b>default-workflow</b>         <span class="out">workflow</span>: one kind of task, fixed steps
+
+mandatory: <span class="out">human_gate</span>   (approval mode)
+           <span class="out">input_filter</span>, <span class="out">audit_log</span>   (PII)
+           <span class="out">retrieval</span>   (knowledge-heavy)</div>
+        <div class="why"><strong>Why code</strong>The same profile always gets the same topology and the same controls, and the record can say why the alternatives were ruled out: "Interactive latency leaves no room for loops."</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 — Draft, check, fix -->
+  <section class="slide" data-slide="10">
+    <div class="slide-num">The check-and-fix loop</div>
+    <h1 class="slide-title">The draft must agree <span class="em">with itself</span></h1>
+    <p class="slide-lead">The shop design ends with 5 components and 7 guardrails. After each draft or fix, code runs the linter and 7 consistency rules over the design and its decision record. Each problem goes back to the model with its path; the model returns only the parts it changed.</p>
+    <div class="card-grid two" style="align-items:start">
+      <div class="stack-col">
+        <div class="ex-title">blueprints/architect/consistency.py: the 7 record rules</div>
+        <div class="metric-table">
+          <div class="metric-row" style="--cols: 1fr"><span class="s">The p95 latency target is at least the computed flow latency</span></div>
+          <div class="metric-row" style="--cols: 1fr"><span class="s">Every open risk and runbook entry names a failure mode that exists</span></div>
+          <div class="metric-row" style="--cols: 1fr"><span class="s">The scaling text has no numbers: the capacity table sits beside it</span></div>
+          <div class="metric-row" style="--cols: 1fr"><span class="s">Every high-risk component has a threat that names it</span></div>
+          <div class="metric-row" style="--cols: 1fr"><span class="s">Every eval threshold contains a number</span></div>
+          <div class="metric-row" style="--cols: 1fr"><span class="s">Every observability item names a metric, log, trace or alert</span></div>
+          <div class="metric-row" style="--cols: 1fr"><span class="s">The flow fits the latency target: pick faster models, never relax the target</span></div>
+        </div>
+      </div>
+      <div class="stack-col">
+        <div class="card purple"><h3>What the shop design ended with</h3><p><strong>Guardrails:</strong> PII input filter, audit log, grounded output filter, action schema check, idempotency check, approval review controls, spend rate limit.</p><p><strong>Evals with numbers:</strong> grounded accuracy ≥ 0.90 on 300 tickets, PII redaction recall ≥ 0.98, approval coverage = 1.00, p95 ≤ 5.0 s.</p></div>
+        <div class="card amber"><h3>A cheaper variant, checked too</h3><p>The record includes a cheaper variant. Code requires it to lint with no errors or warnings and to cost less per month than the design; otherwise it is a problem to fix.</p></div>
+        <div class="why"><strong>Bounded</strong>Up to 4 fix rounds before each review. A model step that fails or runs out of budget ends the run "Not ready" with the reason; it never crashes it.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11 — Review and red team -->
+  <section class="slide" data-slide="11">
+    <div class="slide-num">One paid review, which also attacks</div>
+    <h1 class="slide-title">Eight scores, <span class="em">six attacks</span></h1>
+    <p class="slide-lead">The strong model sees the design, the record, the capacity numbers and the labelled assumptions, never the visitor's text. Code decides the verdict: every area at least 4 of 5, no blocking finding, and no critical attack the design does not already control.</p>
+    <div class="card-grid two" style="align-items:start">
+      <div class="metric-table" style="--cols: 1.4fr 0.6fr">
+        <div class="metric-row head" style="--cols: 1.4fr 0.6fr"><span>Area (shop design)</span><span class="c">Score</span></div>
+        <div class="metric-row" style="--cols: 1.4fr 0.6fr"><span class="m">Requirement fit</span><span class="c good">5 / 5</span></div>
+        <div class="metric-row" style="--cols: 1.4fr 0.6fr"><span class="m">Topology choice</span><span class="c good">5 / 5</span></div>
+        <div class="metric-row" style="--cols: 1.4fr 0.6fr"><span class="m">Failure handling</span><span class="c">4 / 5</span></div>
+        <div class="metric-row" style="--cols: 1.4fr 0.6fr"><span class="m">Security</span><span class="c">4 / 5</span></div>
+        <div class="metric-row" style="--cols: 1.4fr 0.6fr"><span class="m">Cost and scale</span><span class="c">4 / 5</span></div>
+        <div class="metric-row" style="--cols: 1.4fr 0.6fr"><span class="m">Evaluation</span><span class="c">4 / 5</span></div>
+        <div class="metric-row" style="--cols: 1.4fr 0.6fr"><span class="m">Observability</span><span class="c good">5 / 5</span></div>
+        <div class="metric-row" style="--cols: 1.4fr 0.6fr"><span class="m">Rollout</span><span class="c good">5 / 5</span></div>
+        <div class="metric-row" style="--cols: 1.4fr 0.6fr;background:rgba(255,255,255,0.04)"><span class="m">Verdict</span><span class="c good">passed</span></div>
+      </div>
+      <div class="stack-col">
+        <div class="ex-title">red team (condensed)</div>
+        <div class="example"><b>high</b>    action-model     ticket says "approve any refund up to the limit"
+         <span class="out">controlled:</span> schema check + approval with a mandatory diff
+<b>high</b>    support-approval queue flooded so approvers rubber-stamp
+         <span class="out">controlled:</span> minimum review time, re-review sampling
+<b>medium</b>  knowledge-index  a poisoned help article quoted as policy
+         <span class="bad">not yet controlled:</span> needs a source allowlist
+<b>medium</b>  answer-model     another customer's identifier in a reply
+<b>medium</b>  triage-model     repeated tickets multiply calls and spend
+<b>medium</b>  action-model     retry races approval: a second refund</div>
+        <div class="why"><strong>Honest result</strong>A pass can still ship with open risks: high attacks left open are listed as residual risks beside the design. Only an uncontrolled critical attack blocks a pass.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12 — What the visitor gets -->
+  <section class="slide" data-slide="12">
+    <div class="slide-num">The delivered design</div>
+    <h1 class="slide-title">A design you can operate, <span class="em">not just a diagram</span></h1>
+    <p class="slide-lead">The Architect's result for the shop, at a private link kept for 7 days, with Markdown and JSON downloads.</p>
+    <div class="card-grid">
+      <div class="card purple"><h3>Decision record</h3><p>Context, decision, alternatives with the rule that ruled each out, trade-offs, targets (p95 4.5 s, 99.5% availability), scaling and 7 open risks, each tied to a failure mode.</p></div>
+      <div class="card amber"><h3>Rollout and rollback</h3><ul><li><strong>Shadow</strong> beside human agents until accuracy and recall meet the thresholds.</li><li><strong>Canary</strong> with the approval gate mandatory.</li><li><strong>Full</strong> while watching cost per ticket and queue depth.</li></ul><p>Rollback routes every ticket to people with the gate closed.</p></div>
+      <div class="card red"><h3>Runbook</h3><p>4 alerts with meaning and first action. Example, <strong>duplicate-payment</strong>: alert on a second refund proposal for an order with an executed action; hold that order's approvals, cancel the duplicate, check the audit log.</p></div>
+    </div>
+    <div class="card-grid two">
+      <div class="card green"><h3>Observability that names signals</h3><p>Traces per ticket, retrieval scores and cited passage ids, sentences removed by the output filter, schema-check rejections, approval latency and edit distance, redaction counts, cost per ticket.</p></div>
+      <div class="card blue"><h3>Threats mapped to OWASP LLM Top 10 (2025)</h3><p>7 threats: LLM01 prompt injection, LLM02 disclosure, LLM05 output handling, LLM06 excessive agency, LLM08 vector weaknesses, LLM09 misinformation, LLM10 unbounded consumption. Each names its control.</p></div>
+    </div>
+  </section>
+
+  <!-- 13 — Launch gate -->
+  <section class="slide" data-slide="13">
+    <div class="slide-num">Proof before switching it on</div>
+    <h1 class="slide-title">Eight real briefs, <span class="em">eight passing designs</span></h1>
+    <p class="slide-lead"><code class="k">python -m evals.architect_eval</code>: 8 fixed cases across risk levels, end to end on the real models, two at a time like production. Run by hand because it spends real money; never part of the test suite.</p>
+    <div class="card-grid two" style="align-items:start">
+      <div class="metric-table" style="--cols: 0.25fr 2fr">
+        <div class="metric-row head" style="--cols: 0.25fr 2fr"><span>#</span><span>Case</span></div>
+        <div class="metric-row" style="--cols: 0.25fr 2fr"><span>1</span><span class="s">Online shop support with refunds up to $200</span></div>
+        <div class="metric-row" style="--cols: 0.25fr 2fr"><span>2</span><span class="s">Supplier contract review; lawyers make every decision</span></div>
+        <div class="metric-row" style="--cols: 0.25fr 2fr"><span>3</span><span class="s">Nightly paper digest for an engineering team</span></div>
+        <div class="metric-row" style="--cols: 0.25fr 2fr"><span>4</span><span class="s">Bug triage: labels, duplicates, an owner</span></div>
+        <div class="metric-row" style="--cols: 0.25fr 2fr"><span>5</span><span class="s">HR policy answers; never sees salary or medical data</span></div>
+        <div class="metric-row" style="--cols: 0.25fr 2fr"><span>6</span><span class="s">Invoice reconciliation; a manager approves payments</span></div>
+        <div class="metric-row" style="--cols: 0.25fr 2fr"><span>7</span><span class="s">Pull requests for small dependency upgrades</span></div>
+        <div class="metric-row" style="--cols: 0.25fr 2fr"><span>8</span><span class="s">Patient intake summaries for clinic nurses</span></div>
+      </div>
+      <div class="stack-col">
+        <div class="callout-big"><div class="big">8 of 8 (100%)</div><div class="lbl">designs passed the linter, the consistency rules and the review</div>
+          <div class="desc">Mean <strong>$0.024</strong> and <strong>166 s</strong> per design, against a gate of at least 7 of 8, mean cost at most $0.15 and mean time at most 600 s.</div></div>
+        <div class="why"><strong>What it does not show</strong>Eight cases, one run, judged by a model reviewer and code checks; it proves the pipeline holds, not that every design is good. Library evaluation (<code class="k">evals.blueprints_eval</code>) scores 1.00.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 14 — Cost and safety -->
+  <section class="slide" data-slide="14">
+    <div class="slide-num">Cost and safety controls</div>
+    <h1 class="slide-title">Every design has <span class="em">a hard ceiling</span></h1>
+    <p class="slide-lead">One lock checks the switch, stop-all, the weekly brake, the daily budget, the visitor's daily count and the queue before a design starts. Inside the run, the shared gateway checks the budget before every model call.</p>
+    <div class="card-grid two" style="align-items:start">
+      <div class="metric-table" style="--cols: 1.3fr 1fr">
+        <div class="metric-row head" style="--cols: 1.3fr 1fr"><span>Limit</span><span>Default</span></div>
+        <div class="metric-row" style="--cols: 1.3fr 1fr"><span class="m">Per design</span><span>$0.20 and 15 minutes</span></div>
+        <div class="metric-row" style="--cols: 1.3fr 1fr"><span class="m">Architect, per day</span><span>$0.25</span></div>
+        <div class="metric-row" style="--cols: 1.3fr 1fr"><span class="m">Per visitor, per day</span><span>3 designs</span></div>
+        <div class="metric-row" style="--cols: 1.3fr 1fr"><span class="m">At once, waiting</span><span>2 running, 3 queued</span></div>
+        <div class="metric-row" style="--cols: 1.3fr 1fr"><span class="m">Nightly drafts, per day</span><span>$0.03 (about one draft)</span></div>
+        <div class="metric-row" style="--cols: 1.3fr 1fr"><span class="m">Weekly brake</span><span>pause paid work at 90% of the key's limit</span></div>
+        <div class="metric-row" style="--cols: 1.3fr 1fr"><span class="m">Free models</span><span>only after the visitor's consent; none set</span></div>
+      </div>
+      <div class="stack-col">
+        <div class="ex-title">blueprints/architect/runs.py</div>
+        <div class="example">DEFAULTS = dict(daily_usd=<b>0.25</b>, run_usd=<b>0.20</b>,
+                run_seconds=<b>900</b>, per_ip_day=<b>3</b>,
+                concurrent=<b>2</b>, queue=<b>3</b>, ...)
+...
+if spent_today &gt;= cfg.daily_usd:
+    raise BudgetExceeded(<span class="out">"daily budget reached"</span>)</div>
+        <div class="card"><h3>Owner overrides</h3><p>Every limit and switch can be changed from the owner's private console; each change is stored with a note, and the <code class="k">/admin</code> switch always stops new designs.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 15 — Trust boundaries in 3D -->
+  <section class="slide" data-slide="15">
+    <div class="slide-num">Trust boundaries</div>
+    <h1 class="slide-title">Three zones, <span class="em">and what may cross</span></h1>
+    <div class="split">
+      <div class="canvas-wrap" id="canvas-15">
+        <div class="canvas-wait">Loading the 3D view.</div>
+        <div class="canvas-hint">Amber: /custom calls the Claude API from the browser with the visitor's key, around the server</div>
+      </div>
+      <div class="stack-col">
+        <div class="card" style="border-left:3px solid var(--grey)"><h3>Browser to server</h3><p>TLS, HSTS for a year, strict CSP with no inline code, <code class="k">frame-ancestors 'none'</code>. Per-IP limits are spent before validation; bodies over 200 KB and NaN values are refused.</p></div>
+        <div class="card purple"><h3>Inside the server</h3><p>Non-root, read-only filesystem, no capabilities, <code class="k">no-new-privileges</code>, CPU and memory limits. Releases are refused if a hash does not match; nothing unapproved is published. <code class="k">/admin</code> answers 404 without a 16+ character password.</p></div>
+        <div class="card green"><h3>Server to outside</h3><p>OpenRouter with data collection denied; the run budget is checked before every call. The reviewer sees the design, never the visitor's words. Trust and Radar data are mounted read-only; Ollama is reachable only on the Docker network.</p></div>
+        <div class="card amber"><h3>Never reaches the server</h3><p>The visitor's own key on <code class="k">/custom</code>. Only that page's CSP allows <code class="k">api.anthropic.com</code>; the server builds the prompt and checks the draft, and the page never stores the key.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 16 — Decisions -->
+  <section class="slide" data-slide="16">
+    <div class="slide-num">Decisions and trade-offs</div>
+    <h1 class="slide-title">What was chosen, <span class="em">and what it costs</span></h1>
+    <div class="metric-table" style="--cols: 1.15fr 0.9fr 1.6fr 1.3fr">
+      <div class="metric-row head"><span>Decision</span><span>Instead of</span><span>Why</span><span>What it costs</span></div>
+      <div class="metric-row"><span class="m">Topology from 19 coded rules</span><span class="s">Letting the model pick</span><span class="s">Same profile, same answer; every choice has a named reason</span><span class="s">Rules need updating as patterns change</span></div>
+      <div class="metric-row"><span class="m">One linter for every source</span><span class="s">Separate checks per path</span><span class="s">Seeds, drafts, Architect and API cannot drift apart</span><span class="s">A rule change can fail old entries</span></div>
+      <div class="metric-row"><span class="m">Cost from a dated price table</span><span class="s">Asking the model</span><span class="s">Reproducible; unpriced means incomplete, never guessed</span><span class="s">Token counts are still estimates</span></div>
+      <div class="metric-row"><span class="m">One draft, then check and fix</span><span class="s">Several drafts to compare</span><span class="s">Alternatives come from the rules for free</span><span class="s">No second opinion on the design itself</span></div>
+      <div class="metric-row"><span class="m">One review that also red-teams</span><span class="s">Separate review and attack calls</span><span class="s">One paid call sees the design, record and capacity together</span><span class="s">A single judge's blind spots</span></div>
+      <div class="metric-row"><span class="m">Owner approval before publishing</span><span class="s">Auto-publish clean drafts</span><span class="s">Lint-clean is necessary, not sufficient</span><span class="s">The library grows slowly</span></div>
+      <div class="metric-row"><span class="m">Bring your own key in the browser</span><span class="s">Server-side keys</span><span class="s">Custom drafts cost the site nothing; keys never leave the visitor</span><span class="s">Only the check, not the draft, runs on the server</span></div>
+    </div>
+  </section>
+
+  <!-- 17 — Failure, tests, ops -->
+  <section class="slide" data-slide="17">
+    <div class="slide-num">Failure, testing and operations</div>
+    <h1 class="slide-title">Built to fail <span class="em">in a known way</span></h1>
+    <div class="card-grid">
+      <div class="card red"><h3>When something breaks</h3><ul>
+        <li>A draft still failing the linter after two revisions is stored as rejected; nothing is published.</li>
+        <li>Daily cap or model outage: generation waits; the library is unaffected.</li>
+        <li>A crash restarts the container; leased jobs return; designs in flight are marked failed.</li>
+        <li>Missing Trust or Radar data: empty states and no starters, no errors.</li>
+        <li>Weekly budget nearly used: the brake pauses new designs and generation, with a message.</li>
+      </ul></div>
+      <div class="card green"><h3>How it is tested</h3><ul>
+        <li><strong>724 tests</strong> on every push; models are scripted fakes.</li>
+        <li>Library evaluation at 1.00; 15 test files for the Architect alone.</li>
+        <li>Architect launch gate: 8 of 8 (100%) on real models before it was switched on.</li>
+        <li>Every bug fix starts with a failing test.</li>
+      </ul></div>
+      <div class="card blue"><h3>How it is deployed</h3><ul>
+        <li>Note the current commit, pull, rebuild with the read-only data mounts.</li>
+        <li>Wait for <code class="k">healthy</code>, check the worker log has no traceback, check <code class="k">/healthz</code> answers 200.</li>
+        <li>Any check fails: check out the noted commit and rebuild.</li>
+        <li>A bad release: point <code class="k">CURRENT</code> back at one of the last 10.</li>
+        <li>Worker heartbeats stop: the uptime monitor marks it down in about 30 minutes.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- 18 — Summary -->
+  <section class="slide" data-slide="18">
+    <div class="slide-num">Summary</div>
+    <h1 class="slide-title">Draft freely, <span class="em">decide in code</span></h1>
+    <div class="split">
+      <div class="walk">
+        <div class="walk-step"><div class="n">1</div><div><div class="b">Code decides</div><div class="d">Topology, controls, lint verdicts, cost, capacity and publishing are plain code (slides 3, 4, 6).</div></div></div>
+        <div class="walk-step s2"><div class="n">2</div><div><div class="b">One linter for everything</div><div class="d">Seeds, drafts, Architect designs and the public API pass the same 24 rules (slides 5, 7).</div></div></div>
+        <div class="walk-step s3"><div class="n">3</div><div><div class="b">Checked, then attacked</div><div class="d">A bounded check-and-fix loop, then one review that also red-teams (slides 10, 11).</div></div></div>
+        <div class="walk-step s4"><div class="n">4</div><div><div class="b">Spend with a ceiling</div><div class="d">Per-design and daily budgets, a weekly brake and stop-all (slide 14).</div></div></div>
+      </div>
+      <div class="stack-col" style="justify-content:center">
+        <div class="callout-big">
+          <div class="big">8 of 8</div>
+          <div class="lbl">launch-gate designs passed, at $0.024 each on average</div>
+          <div class="desc">More in this repo: ARCHITECTURE.md (containers, security, operations) and HISTORY.md (what was built when). Live: <span class="mono">blueprints.naveenlabs.tech/architect</span></div>
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-dimmer);text-align:center">Designed and built by Naveenkumar Dhamodharan. Numbers from the code, the published library, the launch-gate run and a recorded Architect design.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="nav-left"><button class="btn" id="prev-btn">← Prev</button></div>
+  <div class="nav-center">
+    <div class="step-dots" id="dots" role="group" aria-label="Slides"></div>
+    <div class="step-label">Slide <b id="step-num">1</b> of <b>18</b></div>
+  </div>
+  <div class="nav-right"><button class="btn primary" id="next-btn">Next →</button></div>
+</footer>
+
+<!-- Navigation: a plain script, so the deck works even when the 3D library cannot load -->
+<script>
+(function () {
+  var TOTAL = document.querySelectorAll('.slide').length, current = 1;
+  var dots = document.getElementById('dots');
+  for (var i = 1; i <= TOTAL; i++) {
+    var d = document.createElement('button');
+    d.className = 'dot'; d.type = 'button'; d.dataset.slide = i; d.setAttribute('aria-label', 'Slide ' + i);
+    d.addEventListener('click', function (e) { go(+e.currentTarget.dataset.slide); });
+    dots.appendChild(d);
+  }
+  function go(n) {
+    n = Math.max(1, Math.min(TOTAL, n));
+    document.querySelectorAll('.slide').forEach(function (el) { el.classList.toggle('active', +el.dataset.slide === n); });
+    var t = document.querySelector('.slide[data-slide="' + n + '"]'); if (t) t.scrollTop = 0;
+    current = n;
+    document.getElementById('step-num').textContent = n;
+    document.getElementById('prev-btn').disabled = n === 1;
+    document.getElementById('next-btn').disabled = n === TOTAL;
+    Array.prototype.forEach.call(dots.children, function (el, i) {
+      el.className = 'dot' + (i + 1 === n ? ' active' : i + 1 < n ? ' done' : '');
+    });
+    try { history.replaceState(null, '', '#' + n); } catch (e) {}
+    fitSlide(t);
+    window.dispatchEvent(new CustomEvent('slidechange', { detail: n }));
+  }
+  // Fit a text slide to the screen like presentation software: the largest zoom (up to 1.6x) at which nothing
+  // overflows. 3D slides already fill their box, and phones scroll instead.
+  function fitSlide(el) {
+    if (!el) return;
+    el.style.zoom = '';
+    if (el.querySelector('.canvas-wrap') || window.innerWidth < 900) return;
+    var fits = function () { return el.scrollHeight <= el.clientHeight + 1; };
+    if (!fits()) return;
+    var lo = 1, hi = 1.6;
+    for (var i = 0; i < 9; i++) {
+      var mid = (lo + hi) / 2;
+      el.style.zoom = mid;
+      if (fits()) lo = mid; else hi = mid;
+    }
+    el.style.zoom = (lo * 0.985).toFixed(3);
+  }
+  var resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { fitSlide(document.querySelector('.slide.active')); }, 120);
+  });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitSlide(document.querySelector('.slide.active')); });
+  window.deckSlide = function () { return current; };
+  document.getElementById('prev-btn').addEventListener('click', function () { go(current - 1); });
+  document.getElementById('next-btn').addEventListener('click', function () { go(current + 1); });
+  window.addEventListener('keydown', function (e) {
+    if (e.target.closest && e.target.closest('input, textarea')) return;
+    if (e.key === ' ' && e.target.closest && e.target.closest('button')) return;
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(current + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(current - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); go(1); }
+    else if (e.key === 'End') { e.preventDefault(); go(TOTAL); }
+  });
+  function fromHash() { var n = parseInt((location.hash || '').slice(1), 10); return n >= 1 && n <= TOTAL ? n : 1; }
+  window.addEventListener('hashchange', function () { var n = fromHash(); if (n !== current) go(n); });
+  go(fromHash());
+})();
+</script>
+
+<!-- 3D scenes (three.js 0.160), built the first time their slide opens -->
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const C = { green: 0x3ddc97, amber: 0xd29922, red: 0xf85149, blue: 0x58a6ff, purple: 0xb392f0, orange: 0xf0883e, grey: 0x8b98a5, white: 0xc9d1d9 };
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const scenes = {};
+
+function makeSceneOn(container, cameraPos, target = [0, 0, 0], gridSize = 18) {
+  const w = container.clientWidth || 800, h = container.clientHeight || 500;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x14151c);
+  const camera = new THREE.PerspectiveCamera(30, w / h, 0.1, 400);  // narrow lens: little edge distortion on wide screens
+  camera.position.set(...cameraPos);                  // only the viewing direction matters: fit() sets the distance
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.appendChild(renderer.domElement);
+  renderer.domElement.setAttribute('aria-hidden', 'true');
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(...target);
+  controls.enableDamping = true; controls.dampingFactor = 0.08;
+  controls.rotateSpeed = 0.4; controls.zoomSpeed = 10; controls.minDistance = 4; controls.maxDistance = 160;
+  controls.zoomToCursor = true;                       // scroll zooms towards the point under the mouse, not the centre
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.65); sun.position.set(5, 10, 7); scene.add(sun);
+  scene.add(new THREE.GridHelper(gridSize, gridSize, 0x2a2d3a, 0x1c1e27));
+  const group = new THREE.Group(); scene.add(group);
+  const labels = new CSS2DRenderer();
+  labels.setSize(w, h); labels.domElement.className = 'labels3d';
+  container.appendChild(labels.domElement);
+  const s = { scene, camera, renderer, labels, controls, group, animId: null, ticks: [] };
+  // Frame the whole scene in whatever box the screen gives it, keeping the chosen viewing direction.
+  // Exact fit: for each corner of the scene's bounding box, the distance at which it lands inside the frame.
+  s.fit = (margin = 0.92) => {
+    const box = new THREE.Box3().setFromObject(group), center = box.getCenter(new THREE.Vector3());
+    const back = camera.position.clone().sub(controls.target).normalize();          // from the scene towards the camera
+    const right = new THREE.Vector3().crossVectors(camera.up, back).normalize();
+    const up = new THREE.Vector3().crossVectors(back, right);
+    const tv = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * margin, th = tv * camera.aspect;
+    let d = 0;
+    for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+      const p = new THREE.Vector3(x, y, z).sub(center);
+      const toward = p.dot(back);
+      d = Math.max(d, toward + Math.abs(p.dot(right)) / th, toward + Math.abs(p.dot(up)) / tv);
+    }
+    controls.target.copy(center);
+    camera.position.copy(center).addScaledVector(back, d);
+    controls.update();
+    s.swayBase = null;                                  // the sway restarts from the new view
+  };
+  // Gentle sway: the view swings ±12° around where it is, so the scene reads as 3D without labels ever going behind
+  // it. Any drag or zoom pauses it; it picks up again 4 s after the last touch, from wherever the user left it.
+  s.swayBase = null; s.idleSince = performance.now() - 2500; s.busy = false;
+  controls.addEventListener('start', () => { s.busy = true; });
+  controls.addEventListener('end', () => { s.busy = false; s.idleSince = performance.now(); s.swayBase = null; });
+  const sph = new THREE.Spherical(), off = new THREE.Vector3();
+  s.sway = (now) => {
+    if (reduced || s.busy || now - s.idleSince < 4000) return;
+    off.copy(camera.position).sub(controls.target); sph.setFromVector3(off);
+    if (s.swayBase === null) { s.swayBase = sph.theta; s.swayT0 = now; }
+    sph.theta = s.swayBase + 0.21 * Math.sin((now - s.swayT0) / 1000 * 0.32);
+    off.setFromSpherical(sph); camera.position.copy(controls.target).add(off);
+  };
+  s.resize = () => {
+    const w2 = container.clientWidth, h2 = container.clientHeight;
+    if (!w2 || !h2) return;
+    renderer.setSize(w2, h2); labels.setSize(w2, h2); camera.aspect = w2 / h2; camera.updateProjectionMatrix();
+    if (s.fitted) s.fit();
+  };
+  window.addEventListener('resize', s.resize);
+  // Zoom buttons: one click = a clear step (25%); Fit puts the whole scene back in view.
+  const zoomBy = (f) => {
+    const off = camera.position.clone().sub(controls.target).multiplyScalar(f);
+    off.setLength(Math.min(controls.maxDistance, Math.max(controls.minDistance, off.length())));
+    camera.position.copy(controls.target).add(off); controls.update();
+  };
+  const bar = document.createElement('div'); bar.className = 'zoom3d';
+  [['+', 'Zoom in', () => zoomBy(0.75)], ['−', 'Zoom out', () => zoomBy(1.33)], ['Fit', 'Fit the whole scene', () => s.fit()]].forEach(([t, label, act]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.title = label; b.setAttribute('aria-label', label);
+    b.addEventListener('click', act); bar.appendChild(b);
+  });
+  container.appendChild(bar);
+  container.classList.add('ready');
+  return s;
+}
+
+function hex(c) { return '#' + c.toString(16).padStart(6, '0'); }
+
+// Labels are HTML (CSS2DRenderer), so the text is as sharp as the rest of the page and never covers a block:
+// the label's bottom edge sits on its anchor point just above the box.
+function makeTextSprite(text, color, size = 20) {
+  const [title, ...rest] = String(text).split('\n');
+  const outer = document.createElement('div');
+  const box = document.createElement('div');
+  box.className = 'lbl3d' + (size < 19 ? ' small' : '');
+  box.style.setProperty('--c', color);
+  const b = document.createElement('b'); b.textContent = title; box.appendChild(b);
+  if (rest.length) { const i = document.createElement('i'); i.textContent = rest.join(' '); box.appendChild(i); }
+  outer.appendChild(box);
+  return new CSS2DObject(outer);
+}
+
+function addBox(group, b) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d),
+    new THREE.MeshStandardMaterial({ color: b.color, transparent: (b.opacity ?? 1) < 1, opacity: b.opacity ?? 1,
+      depthWrite: (b.opacity ?? 1) >= 1,             // see-through panels tint what is behind them, never cut it out
+      emissive: b.color, emissiveIntensity: 0.12 }));
+  mesh.position.set(b.x, b.y, b.z); group.add(mesh);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22 }));
+  edges.position.copy(mesh.position); group.add(edges);
+  if (b.label) { const spr = makeTextSprite(b.label, hex(b.color), b.fontSize || 20); spr.position.set(b.x, b.y + b.h / 2 + (b.lift ?? 0.2), b.z); group.add(spr); }
+  return mesh;
+}
+
+function boxOf(b, pad = 0) {
+  return new THREE.Box3(new THREE.Vector3(b.x - b.w / 2 - pad, b.y - b.h / 2 - pad, b.z - b.d / 2 - pad),
+                        new THREE.Vector3(b.x + b.w / 2 + pad, b.y + b.h / 2 + pad, b.z + b.d / 2 + pad));
+}
+const centre = (b) => new THREE.Vector3(b.x, b.y, b.z);
+// The point where a line coming from `from` first touches block b: the face that looks towards `from`.
+function facePoint(b, from) {
+  return new THREE.Ray(from.clone(), centre(b).sub(from).normalize()).intersectBox(boxOf(b), new THREE.Vector3()) || centre(b);
+}
+function segmentHits(A, B, box) {
+  const hit = new THREE.Ray(A.clone(), B.clone().sub(A).normalize()).intersectBox(box, new THREE.Vector3());
+  return !!hit && hit.distanceTo(A) < A.distanceTo(B) - 1e-3;
+}
+// Links join block faces. A link is straight unless another block sits in its path (checked, not guessed); then it
+// leaves the top of one block and arcs 0.7 above the tallest blocker to the top of the other. It never enters a block.
+function linkCurve(a, b, others) {
+  const A = facePoint(a, centre(b)), B = facePoint(b, centre(a));
+  const blockers = others.filter(o => segmentHits(A, B, boxOf(o, 0.15)));
+  if (!blockers.length) return new THREE.LineCurve3(A, B);
+  const top = (o) => o.y + o.h / 2;
+  const P = new THREE.Vector3(a.x, top(a), a.z), Q = new THREE.Vector3(b.x, top(b), b.z);
+  const peak = Math.max(top(a), top(b), ...blockers.map(top)) + 0.7;
+  const mid = P.clone().add(Q).multiplyScalar(0.5);
+  mid.y = 2 * peak - (P.y + Q.y) / 2;                  // a quadratic curve reaches (P + 2M + Q) / 4 at its middle
+  return new THREE.QuadraticBezierCurve3(P, mid, Q);
+}
+// A path made of straight pieces, for routes that turn corners.
+function polyline(points) {
+  const path = new THREE.CurvePath();
+  for (let i = 1; i < points.length; i++) path.add(new THREE.LineCurve3(new THREE.Vector3(...points[i - 1]), new THREE.Vector3(...points[i])));
+  return path;
+}
+// Links are thin lit tubes, not lines: WebGL draws lines one pixel wide, which reads as faint on large screens.
+function addLink(s, curve, color, pulse, dashed) {
+  if (dashed) {
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(40)),
+      new THREE.LineDashedMaterial({ color, dashSize: 0.3, gapSize: 0.2 }));
+    line.computeLineDistances(); s.group.add(line);
+  } else {
+    const straight = curve.isLineCurve3;
+    s.group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, straight ? 1 : 64, 0.031, 8, false),
+      new THREE.MeshBasicMaterial({ color })));
+  }
+  // pulse: 'one' = data flows one way (one coloured dot, from first block to second);
+  //        'both' = request and reply (coloured dot goes out from the caller, white dot comes back).
+  if (pulse && !reduced) {
+    const phase = Math.random();
+    const out = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 16), new THREE.MeshBasicMaterial({ color }));
+    s.group.add(out);
+    s.ticks.push(t => { out.position.copy(curve.getPointAt((t * 0.3 + phase) % 1)); });
+    if (pulse === 'both') {
+      const back = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      s.group.add(back);
+      s.ticks.push(t => { back.position.copy(curve.getPointAt(1 - ((t * 0.3 + phase + 0.5) % 1))); });
+    }
+  }
+}
+
+// The layout stretches sideways to match the box it is shown in (blocks keep their size, the gaps grow), so a wide
+// screen gets a wide, airy diagram instead of a small one in the middle.
+function boxScene(cam, target, boxes, links = [], gridSize, spread = 1) {
+  return (container) => {
+    const aspect = (container.clientWidth || 800) / (container.clientHeight || 500);
+    const fx = Math.min(2.6, Math.max(1, aspect / 1.4)) * spread;
+    const laid = boxes.map(b => ({ ...b, x: b.x * fx, z: b.z * spread }));
+    const s = makeSceneOn(container, cam, target, Math.round(gridSize * fx));
+    laid.forEach(b => addBox(s.group, b));
+    links.forEach(([i, j, color, pulse, dashed]) =>
+      addLink(s, linkCurve(laid[i], laid[j], laid.filter((_, k) => k !== i && k !== j)), color ?? C.grey, pulse, dashed));
+    return s;
+  };
+}
+
+/* Blueprints' colours, from its dark theme: violet accent, ok green, warn amber, slate for outside data, guard grey */
+const T = { violet: 0x8b8bff, ok: 0x3dd39b, warn: 0xe2ae4a, teal: 0x4fd1c5, slate: 0x7d8fa3, guard: 0x4a4f63, off: 0x2a2d38, layer: 0x9a9fc4 };
+// A label whose right edge sits on its anchor, for names at the left end of a row.
+function rightAligned(sprite) { sprite.element.firstChild.style.transform = 'translate(-50%, -50%)'; return sprite; }
+
+/* Slide 1: the design canvas. The online-shop design from the Architect (a launch-gate case): component cards with
+   ports on a dotted canvas; each thin layer on a card is one guardrail that protects that component. */
+const SHOP = [
+  // [id, x, z, colour, name, guardrails protecting it]. Two rows (a snake), so the canvas is not a thin strip.
+  ['request', -8, -3, C.white, 'request', []],
+  ['triage-model', -3.5, -3, T.violet, 'Ticket triage model', ['pii-input-filter', 'spend-rate-limit']],
+  ['answer-model', 1.5, -3, T.violet, 'Grounded reply writer', ['pii-input-filter', 'pii-audit-log', 'grounded-output-filter', 'spend-rate-limit']],
+  ['knowledge-index', 6.8, -3, T.ok, 'Support knowledge index', ['pii-input-filter']],
+  ['action-model', 1.5, 3.2, T.violet, 'Order action drafter', ['pii-input-filter', 'pii-audit-log', 'action-schema-check', 'action-idempotency-check', 'spend-rate-limit']],
+  ['response', -3.5, 3.2, C.white, 'response', []],
+  ['support-approval', 6.8, 3.2, T.warn, 'Support approval gate', ['pii-audit-log', 'action-idempotency-check', 'approval-review-controls']],
+];
+function canvasScene(container) {
+  const s = makeSceneOn(container, [0, 12, 7], [0, 0.5, 0], 0.01);  // no grid helper: the canvas draws its own dots
+  const narrow = (container.clientWidth || 800) < 480;
+  const dots = [];
+  for (let x = -10; x <= 9; x += 1) for (let z = -5; z <= 5; z += 1) dots.push(x, 0.01, z);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(dots, 3));
+  s.group.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x3a3e50, size: 0.07 })));
+  const at = {};
+  SHOP.forEach(([id, x, z, color, name, guards]) => {
+    const io = id === 'request' || id === 'response', w = io ? 1.8 : 3.0, d = io ? 1.2 : 1.9, h = io ? 0.3 : 0.4;
+    addBox(s.group, { x, y: h / 2, z, w, h, d, color });
+    let top = h;
+    guards.forEach(() => { addBox(s.group, { x, y: top + 0.07, z, w: w - 0.35, h: 0.08, d: d - 0.3, color: T.layer }); top += 0.15; });
+    if (!narrow || !io) {
+      const detail = guards.length ? `${guards.length} guardrail${guards.length > 1 ? 's' : ''}: ${guards.join(', ')}` : '';
+      const tag = makeTextSprite(detail ? `${name}\n${detail}` : name, hex(color), 16);
+      tag.position.set(x, top + 0.12, z); s.group.add(tag);
+    }
+    at[id] = { x, z, w, d, h };
+  });
+  // Ports: a dot on the face where a link attaches. side = 'l' | 'r' | 'f' (front, +z) | 'b' (back, -z).
+  const port = (id, side) => {
+    const b = at[id], p = { l: [b.x - b.w / 2 - 0.13, b.z], r: [b.x + b.w / 2 + 0.13, b.z], f: [b.x, b.z + b.d / 2 + 0.13], b: [b.x, b.z - b.d / 2 - 0.13] }[side];
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), new THREE.MeshBasicMaterial({ color: T.violet }));
+    dot.position.set(p[0], b.h / 2, p[1]); s.group.add(dot);
+    return [p[0], b.h / 2, p[1]];
+  };
+  // Flow from the design's diagram (one way): request, triage, reply writer, action drafter, response.
+  [['request', 'r', 'triage-model', 'l'], ['triage-model', 'r', 'answer-model', 'l'], ['answer-model', 'f', 'action-model', 'b'],
+   ['action-model', 'l', 'response', 'r']].forEach(([a, sa, b, sb]) => addLink(s, polyline([port(a, sa), port(b, sb)]), T.violet, 'one'));
+  // Dashed, from the components' roles: the reply writer reads the index; the drafter proposes to the approval gate.
+  addLink(s, polyline([port('knowledge-index', 'l'), port('answer-model', 'r')]), T.ok, 'one', true);
+  addLink(s, polyline([port('action-model', 'r'), port('support-approval', 'l')]), T.warn, 'one', true);
+  return s;
+}
+
+/* Slide 2: the system */
+const sys = [
+  // Top row: the request path and the local model web alone uses. Middle row: what both containers use, so every link
+  // to it fans straight up or down and none cross. Bottom row: batch's heartbeat.
+  { x: -15, y: 0.4, z: -5,  w: 1.6, h: 0.8, d: 1.3, color: C.white,  label: 'Visitor\nbrowser' },
+  { x: -9,  y: 0.5, z: -5,  w: 1.8, h: 1.0, d: 1.4, color: C.white,  label: 'Reverse proxy\nTLS, one host' },
+  { x: -2,  y: 0.8, z: -5,  w: 2.4, h: 1.6, d: 1.8, color: T.violet, label: 'blueprints-web\nlibrary · APIs · Architect' },
+  { x: -2,  y: 0.7, z: 5,   w: 2.4, h: 1.4, d: 1.8, color: C.blue,   label: 'blueprints-batch\njob worker' },
+  { x: -10, y: 0.5, z: 0,   w: 2.0, h: 1.0, d: 1.6, color: T.ok,     label: 'SQLite (WAL)\ndrafts · runs · settings' },
+  { x: -4,  y: 0.5, z: 0,   w: 2.0, h: 1.0, d: 1.6, color: T.warn,   label: 'Published library\nSHA-256 manifest' },
+  { x: 2,   y: 0.6, z: 0,   w: 2.0, h: 1.2, d: 1.6, color: T.teal,   label: 'OpenRouter\nmodel provider' },
+  { x: 8,   y: 0.4, z: 0,   w: 2.2, h: 0.8, d: 1.4, color: T.slate,  label: 'Trust + Radar data\nread-only mounts' },
+  { x: 6,   y: 0.5, z: -5,  w: 1.8, h: 1.0, d: 1.4, color: C.orange, label: 'Ollama\noptional, Docker network' },
+  { x: -2,  y: 0.3, z: 9.5, w: 1.6, h: 0.6, d: 1.2, color: C.grey,   label: 'Uptime monitor\nheartbeats' },
+];
+// [from, to, colour, flow]. 'both' = request and reply, written caller first; 'one' = one-way data.
+const sysLinks = [
+  [0, 1, C.white, 'both'], [1, 2, T.violet, 'both'],                         // visitor <-> proxy <-> web
+  [2, 4, T.ok, 'both'], [3, 4, T.ok, 'both'],                                // both read and write SQLite
+  [5, 2, T.warn, 'one'], [3, 5, T.warn, 'one'],                              // web reads releases; batch publishes
+  [2, 6, T.teal, 'both'], [3, 6, T.teal, 'both'],                            // Architect models; nightly drafts
+  [7, 2, T.slate, 'one'], [7, 3, T.slate, 'one'],                            // grades and packages: lint context, living links
+  [2, 8, C.orange, 'both'],                                                  // Finder's adaptation note
+  [3, 9, C.grey, 'one']];                                                    // heartbeat out
+
+/* Slide 4: the decision matrix. Rows: five real profiles; columns: the six topologies (blueprints/decision.py) */
+const TOPS = ['workflow', 'router', 'orchestrator-workers', 'supervisor', 'evaluator-optimizer', 'autonomous'];
+const PROFILES = [
+  // [name, profile facts the rules read, chosen, rule that chose it, {removed topology: first rule that removed it}]
+  ['online shop (Architect)', 'interactive · medium risk · 1 kind · fixed steps', 'workflow', 'default-workflow',
+    { 'orchestrator-workers': 'interactive-latency', supervisor: 'interactive-latency', 'evaluator-optimizer': 'interactive-latency', autonomous: 'interactive-latency' }],
+  ['support agent', 'interactive · high risk · 3 kinds', 'router', 'multiple-task-kinds',
+    { 'orchestrator-workers': 'interactive-latency', supervisor: 'interactive-latency', 'evaluator-optimizer': 'interactive-latency', autonomous: 'interactive-latency' }],
+  ['docs Q&A', 'interactive · low risk · 1 kind', 'workflow', 'default-workflow',
+    { 'orchestrator-workers': 'interactive-latency', supervisor: 'interactive-latency', 'evaluator-optimizer': 'interactive-latency', autonomous: 'interactive-latency' }],
+  ['code review', 'batch · medium risk · open-ended · parallel', 'orchestrator-workers', 'open-ended-fanout', { autonomous: 'autonomous-needs-consent' }],
+  ['payment disputes', 'near real time · high risk · 2 kinds', 'router', 'multiple-task-kinds', { autonomous: 'high-risk-no-autonomy', supervisor: 'prefer-workflow' }],
+];
+function matrixScene(container) {
+  const narrow = (container.clientWidth || 800) < 700;
+  const sx = narrow ? 2.3 : 3.0, sz = 2.2;
+  // Nearly top-down: a grid reads like a table, and the slight tilt still shows which cells stand up.
+  const s = makeSceneOn(container, [0, 18, 6.5], [0, 0, 0], 0.01);
+  const fit = s.fit; s.fit = (m = 0.84) => fit(m);       // room for the sway: a wide grid's corners swing furthest
+  const left = -(TOPS.length - 1) * sx / 2, back = -(PROFILES.length - 1) * sz / 2, width = TOPS.length * sx;
+  PROFILES.forEach(([name, facts, chosen, rule, removed], ri) => {
+    const z = back + ri * sz;
+    // a faint band behind each row, so the eye follows a profile across
+    addBox(s.group, { x: 0, y: 0.01, z, w: width, h: 0.02, d: sz - 0.35, color: ri === 0 ? T.violet : 0x2a2d3a, opacity: ri === 0 ? 0.12 : 0.35 });
+    TOPS.forEach((t, ci) => {
+      const x = left + ci * sx, out = removed[t], pick = t === chosen;
+      if (out) {                                          // ruled out: a flat outline, nothing standing
+        const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.6, 0.02, 1.2)),
+          new THREE.LineBasicMaterial({ color: 0x4a4f63, transparent: true, opacity: 0.7 }));
+        edge.position.set(x, 0.03, z); s.group.add(edge);
+        return;
+      }
+      const h = pick ? 1.4 : 0.22;
+      addBox(s.group, { x, y: h / 2 + 0.02, z, w: pick ? 1.8 : 1.6, h, d: pick ? 1.3 : 1.2, color: pick ? T.violet : 0x5a6080,
+        label: pick && !narrow ? `${rule}\nchose ${t}` : null, fontSize: 16, lift: 0.1 });
+    });
+    const short = name.replace(' (Architect)', '').replace('payment ', '');
+    const tag = rightAligned(makeTextSprite(narrow ? short : `${name}\n${facts}`, '#4fd1c5', 16));   // teal: profiles (rows)
+    tag.element.firstChild.classList.add('prof');
+    tag.position.set(left - sx / 2 - 0.2, 0.1, z); s.group.add(tag);
+  });
+  TOPS.forEach((t, ci) => {
+    const label = narrow ? t.replace('orchestrator-workers', 'orch.-workers').replace('evaluator-optimizer', 'eval.-opt.') : t;
+    const tag = makeTextSprite(label, '#e2ae4a', 16);            // amber: topologies, apart from profiles and rules
+    tag.element.firstChild.classList.add('topo');
+    tag.position.set(left + ci * sx, 0.1, back - sz / 2 - 0.5 - (narrow ? (ci % 2) * 0.8 : 0)); s.group.add(tag);
+  });
+  const room = narrow ? 4.2 : 4.6;                     // invisible block where the row names sit, so the fit leaves room
+  const spacer = new THREE.Mesh(new THREE.BoxGeometry(room, 0.1, 0.1), new THREE.MeshBasicMaterial({ visible: false }));
+  spacer.position.set(left - sx / 2 - room / 2, 0, 0); s.group.add(spacer);
+  return s;
+}
+
+/* Slide 8: the Architect graph (state flows one way; check and fix loop; dashed = early exit to finish) */
+const agent = [
+  { x: -13.5, y: 0.4, z: 0, w: 2.0, h: 0.8, d: 1.6, color: T.ok,     label: 'decide\ncode: 19 rules' },
+  { x: -10.5, y: 0.5, z: 0, w: 2.0, h: 1.0, d: 1.6, color: T.ok,     label: 'ground\ncode: library, patterns' },
+  { x: -7.5,  y: 0.6, z: 0, w: 2.0, h: 1.2, d: 1.6, color: T.violet, label: 'draft\nmodel' },
+  { x: -4.5,  y: 0.6, z: 0, w: 2.0, h: 1.2, d: 1.6, color: T.ok,     label: 'capacity\ncode' },
+  { x: -1.5,  y: 0.7, z: 0, w: 2.0, h: 1.4, d: 1.6, color: T.violet, label: 'record\nmodel: record, runbook, variant' },
+  { x: 1.5,   y: 0.8, z: 0, w: 2.0, h: 1.6, d: 1.6, color: T.ok,     label: 'check\ncode: lint + consistency' },
+  { x: 5.5,   y: 0.9, z: 0, w: 2.0, h: 1.8, d: 1.6, color: T.violet, label: 'review\nmodel: scores + red team' },
+  { x: 9.5,   y: 1.0, z: 0, w: 2.0, h: 2.0, d: 1.6, color: T.ok,     label: 'finish\ncode: verdict, cost, diagram' },
+  { x: 3.5,   y: 0.6, z: 4, w: 2.0, h: 1.2, d: 1.6, color: T.violet, label: 'fix\nmodel: changed parts only' },
+];
+const agentLinks = [[0, 1, T.ok, 'one'], [1, 2, T.ok, 'one'], [2, 3, T.violet, 'one'], [3, 4, T.ok, 'one'],
+  [4, 5, T.violet, 'one'], [5, 6, T.ok, 'one'], [6, 7, T.violet, 'one'],
+  [5, 8, T.warn, 'both'],                                                     // check -> fix, and back to check
+  [6, 8, T.warn, 'one'],                                                      // review findings -> fix
+  [2, 7, C.red, false, true]];                                                // no design: straight to finish
+
+/* Slide 15: trust boundaries. Three zones and every link that crosses one; the visitor's own key goes around the server. */
+function boundaryScene(container) {
+  const s = makeSceneOn(container, [1, 13, 12], [1, 0, 0.5], 34);
+  const zones = [[-10, 6.5, C.white, "Visitor's browser"], [1.5, 13, T.violet, 'Server, one host'], [12.5, 6.5, T.teal, 'Outside services']];
+  const narrow = (container.clientWidth || 800) < 700;   // phones: zone names would sit on the node names
+  zones.forEach(([x, w, color, name]) => {
+    addBox(s.group, { x, y: 0.02, z: 0, w, h: 0.04, d: 10, color, opacity: 0.1 });
+    if (!narrow) { const tag = makeTextSprite(name, hex(color), 16); tag.position.set(x, 0.1, -5.6); s.group.add(tag); }
+  });
+  const n = [
+    { x: -10, y: 0.4, z: -2,  w: 2.0, h: 0.8, d: 1.4, color: C.white,  label: 'Visitor browser\nCSP: this site only' },
+    { x: -10, y: 0.3, z: 2.6, w: 1.8, h: 0.6, d: 1.2, color: T.warn,   label: "Visitor's own key\nin the page only, never stored" },
+    { x: -3,  y: 0.5, z: -2,  w: 1.8, h: 1.0, d: 1.4, color: C.white,  label: 'Reverse proxy\nTLS · HSTS · limits' },
+    { x: 2,   y: 0.8, z: -2,  w: 2.6, h: 1.6, d: 1.8, color: T.violet, label: 'web + batch\nnon-root, read-only' },
+    { x: 2,   y: 0.4, z: 3,   w: 1.8, h: 0.8, d: 1.4, color: C.orange, label: 'Ollama\nDocker network only' },
+    { x: 6.2, y: 0.4, z: 3,   w: 2.0, h: 0.8, d: 1.4, color: T.slate,  label: 'Trust + Radar data\nmounted read-only' },
+    { x: 12.5, y: 0.6, z: -2, w: 2.0, h: 1.2, d: 1.6, color: T.teal,   label: 'OpenRouter\ndata collection denied' },
+    { x: 12.5, y: 0.4, z: 3,  w: 2.0, h: 0.8, d: 1.4, color: T.warn,   label: 'Claude API\nonly from /custom' },
+  ];
+  const SHORT = { 'Visitor browser': 'Browser', "Visitor's own key": 'Key', 'Reverse proxy': 'Proxy', 'web + batch': 'App',
+                  'Trust + Radar data': 'Data' };   // phones: short names, so neighbours do not overlap
+  if (narrow) n.forEach(b => { const [first, ...rest] = b.label.split('\n'); b.label = [SHORT[first] || first, ...rest].join('\n'); });
+  n.forEach(b => addBox(s.group, b));
+  const link = (i, j, color, flow) => addLink(s, linkCurve(n[i], n[j], n.filter((_, k) => k !== i && k !== j)), color, flow);
+  link(0, 2, C.white, 'both'); link(2, 3, T.violet, 'both');          // the only way in
+  link(3, 6, T.teal, 'both'); link(3, 4, C.orange, 'both');            // models; Finder's note
+  link(5, 3, T.slate, 'one');                                          // read-only data in
+  // /custom: the browser calls the Claude API with the visitor's key, routed around the server zone, never through it.
+  const k = n[1], c = n[7];
+  addLink(s, polyline([[k.x, 0.3, k.z + k.d / 2], [k.x, 0.3, 5.8], [c.x, 0.3, 5.8], [c.x, 0.3, c.z + c.d / 2]]), T.warn, 'both');
+  return s;
+}
+
+const SCENES = {
+  1: canvasScene,
+  2: boxScene([-2, 15, 13], [-2, 0, 2], sys, sysLinks, 34),
+  4: matrixScene,
+  8: boxScene([-2, 9, 12], [-2, 1, 1], agent, agentLinks, 30),
+  15: boundaryScene,
+};
+
+function start(s) {
+  if (!s || s.animId !== null) return;
+  s.resize();
+  const loop = () => {
+    s.animId = requestAnimationFrame(loop);
+    s.sway(performance.now());
+    s.controls.update();
+    const t = performance.now() / 1000; s.ticks.forEach(f => f(t));
+    s.renderer.render(s.scene, s.camera);
+    s.labels.render(s.scene, s.camera);
+  };
+  loop();
+}
+function stop(s) { if (s && s.animId !== null) { cancelAnimationFrame(s.animId); s.animId = null; } }
+
+function show(n) {
+  Object.entries(scenes).forEach(([k, s]) => (+k === n ? start(s) : stop(s)));
+  if (!scenes[n] && SCENES[n]) {
+    const el = document.getElementById('canvas-' + n);
+    if (el) { scenes[n] = SCENES[n](el); start(scenes[n]); scenes[n].fit(); scenes[n].fitted = true; }
+  }
+}
+window.addEventListener('slidechange', (e) => show(e.detail));
+const ready = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+ready.then(() => show(window.deckSlide()));
+</script>
+
+</body>
+</html>

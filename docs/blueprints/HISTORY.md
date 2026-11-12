@@ -9,7 +9,7 @@ detail.
   lint API, Architect agent.
 - Nightly generation is **paused** (2026-10-11): 3 generated drafts wait unreviewed in `/admin`; the Architect's caps are
   $0.20 per design and $0.25 per day.
-- About 710 tests; library evaluation at 1.00.
+- About 720 tests; library evaluation at 1.00.
 
 ## Timeline
 
@@ -23,6 +23,7 @@ detail.
 | 2026-10-08 | Owner controls (Architect switch and limits, batch cap, weekly brake, stop-all) and the private control interface; generation moved to OpenRouter with a daily cap; rate-limited calls retry in minutes |
 | 2026-10-09 | Own architecture and history documents |
 | 2026-10-11 | Nightly generation paused from the owner's console until the waiting drafts are reviewed; the private report lists recent runs and batch jobs (metadata only) for the console |
+| 2026-11-12 | Engineering explainer deck (`docs/blueprints/explainer.html`): 18 slides in Blueprints' own look, with a 3D design canvas of a real Architect design, the system, a decision matrix of five real profiles against the six topologies, the Architect graph and the trust boundaries (the visitor's own key never reaches the server); the cost model, review and red team worked from that design. Every number checked against the code, the published library and the launch-gate record. The architecture diagram now shows web reading Trust and Radar data for lint context |
 
 ## Open items
 
